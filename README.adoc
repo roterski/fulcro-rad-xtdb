@@ -2,6 +2,9 @@
 
 This is a plugin for Fulcro RAD that adds support for using Datomic databases as the back-end technology.
 
+NOTE: The current version only supports on-prem with a PostgreSQL store. There is
+nothing in the design that requires this, it has just not yet been generalized.
+
 == Conventions
 
 The following namespace aliases are used in the content of this document:
