@@ -10,13 +10,10 @@
     [datomic.function :as df]
     [datomock.core :as dm :refer [mock-conn]]
     [edn-query-language.core :as eql]
-    [mount.core :refer [defstate]]
     [com.wsscode.pathom.connect :as pc]
     [taoensso.timbre :as log]
     [taoensso.encore :as enc]
-    [com.fulcrologic.rad.authorization :as auth]
-    [clojure.spec.alpha :as s]
-    [com.example.components.config :as config]))
+    [com.fulcrologic.rad.authorization :as auth]))
 
 (def type-map
   {:string   :db.type/string
