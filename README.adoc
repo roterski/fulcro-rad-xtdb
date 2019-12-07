@@ -1,5 +1,9 @@
 = Datomic Database Plugin
 
+This is a plugin for Fulcro RAD that adds support for using Datomic databases as the back-end technology.
+
+== Conventions
+
 The following namespace aliases are used in the content of this document:
 
 [source, clojure]
@@ -172,4 +176,40 @@ can use `(datomic/reset-test-schema k)` to forget the current memoized version.
 
 == Resolver Generation
 
+
+
+== Contributing to This Library
+
+We use git (with git flow) for source control. Please branch and make PRs against the `develop` branch.
+
+The source of this repository includes an example application that can be used when developing features.
+It is enabled on the source path using the Clj deps `dev` alias. This alias also overrides the `fulcro-rad` dependency
+to a local disk directory (you need to check out and edit deps). This allows you to work on the RAD source code
+at the same time as the Datomic and example code.
+
+In general you will clone both this repository and the `fulcro-rad` one as well.
+
+You will need Datomic using a PostgreSQL backend to run the example. Follow the instructions for setting that up, and then
+edit the `defaults.edn` file in `src/example/config` and update the database parameters to match your system.
+
+Once you have Datomic running you'll need to start a cljs build.
+
+[source,bash]
+------
+$ shadow-cljs server
+------
+
+Then go to dashboard URL and start the `example` CLJS build at http://localhost:9630. Then, you'll start a REPL
+for working on the CLJ stuff:
+
+[source,bash]
+------
+$ clj -A:dev
+user=> (require 'development)
+user=> (in-ns 'development)
+development=> (go)
+------
+
+will start a server and should make the demo accessible at http://localhost:3000/index.html. The `(restart)` function
+will stop the server, refresh server source, and restart it.
 

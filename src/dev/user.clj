@@ -8,7 +8,7 @@
     [expound.alpha :as expound]
     [taoensso.timbre :as log]))
 
-(set-refresh-dirs "src/main" "src/test" "src/dev")
+(set-refresh-dirs "src/main" "src/test" "src/dev" "src/example")
 
 (alter-var-root #'s/*explain-out* (constantly expound/printer))
 
