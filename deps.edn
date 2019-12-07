@@ -21,4 +21,18 @@
 
            :dev       {:extra-paths   ["src/dev" "resources" "src/example"]
                        :override-deps {com.fulcrologic/fulcro-rad {:local/root "/Users/tonykay/fulcrologic/fulcro-rad"}}
-                       :extra-deps    {org.clojure/tools.namespace {:mvn/version "0.3.1"}}}}}
+                       :extra-deps    {thheller/shadow-cljs                {:mvn/version "2.8.69"}
+                                       com.fulcrologic/semantic-ui-wrapper {:mvn/version "1.0.0"}
+                                       mount                               {:mvn/version "0.1.12"}
+
+                                       ;; Unified logging for server
+                                       org.slf4j/log4j-over-slf4j          {:mvn/version "1.7.25"} ; auto sends log4j to slf4j
+                                       org.slf4j/jul-to-slf4j              {:mvn/version "1.7.25"} ; auto sends java.util.logging to slf4j
+                                       org.slf4j/jcl-over-slf4j            {:mvn/version "1.7.25"} ; auto-sends java.common.logging to slf4j
+                                       com.fzakaria/slf4j-timbre           {:mvn/version "0.3.7"} ; hooks slf4j to timbre
+
+                                       http-kit                            {:mvn/version "2.3.0"}
+                                       binaryage/devtools                  {:mvn/version "0.9.10"}
+                                       ring/ring-defaults                  {:mvn/version "0.3.2"}
+                                       ring/ring-core                      {:mvn/version "1.7.1"}
+                                       org.clojure/tools.namespace         {:mvn/version "0.3.1"}}}}}
