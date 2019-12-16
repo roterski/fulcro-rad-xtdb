@@ -57,22 +57,21 @@
   sequential or not.
 
   Optionally takes in a transform-fn, applies to individual result(s)."
-  ([db pattern eid-or-eids]
+  ([db pattern ident-keywords eid-or-eids]
    (->> (if (and (not (eql/ident? eid-or-eids)) (sequential? eid-or-eids))
           (d/pull-many db pattern eid-or-eids)
           (d/pull db pattern eid-or-eids))
-     ;; TODO: Pull known enum ref types from schema
-     (replace-ref-types db #{})))
-  ([db pattern eid-or-eids transform-fn]
-   (let [result (pull-* db pattern eid-or-eids)]
+     (replace-ref-types db ident-keywords)))
+  ([db pattern ident-keywords eid-or-eids transform-fn]
+   (let [result (pull-* db pattern ident-keywords eid-or-eids)]
      (if (sequential? result)
        (mapv transform-fn result)
        (transform-fn result)))))
 
-(defn get-by-ids [db pk ids desired-output]
+(defn get-by-ids [db pk ids ident-keywords desired-output]
   ;; TODO: Should use consistent DB for atomicity
   (let [eids (mapv (fn [id] [pk id]) ids)]
-    (pull-* db desired-output eids)))
+    (pull-* db desired-output ident-keywords eids)))
 
 (defn ref->ident
   "Sometimes references on the client are actual idents and sometimes they are
@@ -413,20 +412,21 @@ in for an attribute?
 
 (defn entity-query
   [{::keys      [schema]
-    ::attr/keys [qualified-key]
+    ::attr/keys [qualified-key attributes]
     :as         env} input]
   (let [one? (not (sequential? input))]
-    (enc/if-let [db    (get-in env [::databases schema])
-                 query (or
-                         (get env :com.wsscode.pathom.core/parent-query)
-                         (get env ::default-query))
-                 ids   (if one?
-                         [(get input qualified-key)]
-                         (into [] (keep #(get % qualified-key) input)))]
+    (enc/if-let [db             (get-in env [::databases schema])
+                 query          (get env ::default-query)
+                 ids            (if one?
+                                  [(get input qualified-key)]
+                                  (into [] (keep #(get % qualified-key) input)))
+                 ident-keywords (into #{}
+                                  (keep #(when (= :enum (::attr/type %))
+                                           (::attr/qualified-key %)))
+                                  attributes)]
       (do
         (log/info "Running" query "on entities with " qualified-key ":" ids)
-        (let [
-              result (get-by-ids db qualified-key ids query)]
+        (let [result (get-by-ids db qualified-key ids ident-keywords query)]
           (if one?
             (first result)
             result)))
@@ -450,6 +450,7 @@ in for an attribute?
                                     (entity-query
                                       (assoc env
                                         ::schema schema
+                                        ::attr/attributes attributes
                                         ::attr/qualified-key id-key
                                         ::default-query outputs)
                                       input)
