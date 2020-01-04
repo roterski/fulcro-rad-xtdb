@@ -13,7 +13,8 @@
     [com.wsscode.pathom.connect :as pc]
     [taoensso.timbre :as log]
     [taoensso.encore :as enc]
-    [com.fulcrologic.rad.authorization :as auth]))
+    [com.fulcrologic.rad.authorization :as auth]
+    [cljs.spec.alpha :as s]))
 
 (def type-map
   {:string   :db.type/string
@@ -124,17 +125,17 @@
                                     (for [r retracts] [:db/retract eid k r])
                                     (for [a adds] [:db/add eid k a]))))
 
-                              ;; Assume field is optional and omit
-                              (and (nil? before) (nil? after)) []
+                                ;; Assume field is optional and omit
+                                (and (nil? before) (nil? after)) []
 
-                              :else (if (nil? after)
-                                      (if (ref->ident before)
-                                        [[:db/retract (str id) k (ref->ident before)]]
-                                        [[:db/retract (str id) k before]])
-                                      [[:db/add (str id) k after]]))))
-                  entity-diff)
-                {id-k id :db/id (str id)})))
-    delta))
+                                :else (if (nil? after)
+                                        (if (ref->ident before)
+                                          [[:db/retract (str id) k (ref->ident before)]]
+                                          [[:db/retract (str id) k before]])
+                                        [[:db/add (str id) k after]]))))
+                    entity-diff)
+                  {id-k id :db/id (str id)})))
+      delta)))
 
 (def keys-in-delta
   (memoize
@@ -154,9 +155,6 @@
                    all-keys)]
     schemas))
 
-;; TASK: Is Two-phase commit possible, since multiple database might be saved to? We could auto-generate the inverse of
-;; the delta as an "undo", but it is hard to ensure an undo will succeed.
-;; TASK: UNTESTED.
 (defn save-form
   "Do all of the possible Datomic operations for the given form delta (save to all Datomic databases involved)"
   [env form-delta]
@@ -171,7 +169,8 @@
       (if (and connection (seq txn))
         @(d/transact connection txn)
         (log/error "Unable to save form. Either connection was missing in env, or txn was empty."))))
-  nil)
+  ;; TASK: tempid remappings
+  {})
 
 (def suggested-logging-blacklist
   "A vector containing a list of namespace strings that generate a lot of debug noise when using Datomic. Can
