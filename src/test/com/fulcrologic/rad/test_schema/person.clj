@@ -22,7 +22,6 @@
    ::datomic/schema           :production
    ::datomic/intended-targets #{:com.fulcrologic.rad.test-schema.address/id}
    ::datomic/entity-ids       #{::id}
-   :db/isComponent            true
-   ::auth/authority           :local})
+   :db/isComponent            true})
 
 (def attributes [id name email addresses])

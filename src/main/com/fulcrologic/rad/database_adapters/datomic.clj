@@ -1,20 +1,22 @@
 (ns com.fulcrologic.rad.database-adapters.datomic
   (:require
+    [cljs.spec.alpha :as s]
     [clojure.set :as set]
     [clojure.walk :as walk]
+    [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
     [com.fulcrologic.guardrails.core :refer [>defn => ?]]
     [com.fulcrologic.rad.attributes :as attr]
+    [com.fulcrologic.rad.authorization :as auth]
     [com.fulcrologic.rad.form :as form]
     [com.fulcrologic.rad.ids :refer [select-keys-in-ns]]
+    [com.rpl.specter :as sp]
+    [com.wsscode.pathom.connect :as pc]
     [datomic.api :as d]
     [datomic.function :as df]
     [datomock.core :as dm :refer [mock-conn]]
     [edn-query-language.core :as eql]
-    [com.wsscode.pathom.connect :as pc]
-    [taoensso.timbre :as log]
     [taoensso.encore :as enc]
-    [com.fulcrologic.rad.authorization :as auth]
-    [cljs.spec.alpha :as s]))
+    [taoensso.timbre :as log]))
 
 (def type-map
   {:string   :db.type/string
@@ -85,45 +87,46 @@
   into a Datomic transaction for the given schema (returns empty txn if there is nothing on the delta for that schema)."
   [schema delta]
   ;; TASK: test mapcat on nil (nothing on schema)
-  (mapcat (fn [[[id-k id] entity-diff]]
-            (when (-> id-k attr/key->attribute ::schema (= schema))
-              (conj
-                (mapcat (fn [[k diff]]
-                          (let [{:keys [before after]} diff]
-                            (cond
-                              (ref->ident after) (if (nil? after)
-                                                   [[:db/retract (str id) k (ref->ident before)]]
-                                                   [[:com.fulcrologic.rad.fn/add-ident (str id) k (ref->ident after)]])
+  (vec
+    (mapcat (fn [[[id-k id] entity-diff]]
+              (when (-> id-k attr/key->attribute ::schema (= schema))
+                (conj
+                  (mapcat (fn [[k diff]]
+                            (let [{:keys [before after]} diff]
+                              (cond
+                                (ref->ident after) (if (nil? after)
+                                                     [[:db/retract (str id) k (ref->ident before)]]
+                                                     [[:com.fulcrologic.rad.fn/add-ident (str id) k (ref->ident after)]])
 
-                              (and (sequential? after) (every? ref->ident after))
-                              (let [before   (into #{}
-                                               (comp (map ref->ident) (remove nil?))
-                                               before)
-                                    after    (into #{}
-                                               (comp (map ref->ident) (remove nil?))
-                                               after)
-                                    retracts (set/difference before after)
-                                    adds     (set/difference after before)
-                                    eid      (str id)]
-                                (vec
-                                  (concat
-                                    (for [r retracts] [:db/retract eid k r])
-                                    (for [a adds] [:com.fulcrologic.rad.fn/add-ident eid k a]))))
+                                (and (sequential? after) (every? ref->ident after))
+                                (let [before   (into #{}
+                                                 (comp (map ref->ident) (remove nil?))
+                                                 before)
+                                      after    (into #{}
+                                                 (comp (map ref->ident) (remove nil?))
+                                                 after)
+                                      retracts (set/difference before after)
+                                      adds     (set/difference after before)
+                                      eid      (str id)]
+                                  (vec
+                                    (concat
+                                      (for [r retracts] [:db/retract eid k r])
+                                      (for [a adds] [:com.fulcrologic.rad.fn/add-ident eid k a]))))
 
-                              (and (sequential? after) (every? keyword? after))
-                              (let [before   (into #{}
-                                               (comp (remove nil?))
-                                               before)
-                                    after    (into #{}
-                                               (comp (remove nil?))
-                                               after)
-                                    retracts (set/difference before after)
-                                    adds     (set/difference after before)
-                                    eid      (str id)]
-                                (vec
-                                  (concat
-                                    (for [r retracts] [:db/retract eid k r])
-                                    (for [a adds] [:db/add eid k a]))))
+                                (and (sequential? after) (every? keyword? after))
+                                (let [before   (into #{}
+                                                 (comp (remove nil?))
+                                                 before)
+                                      after    (into #{}
+                                                 (comp (remove nil?))
+                                                 after)
+                                      retracts (set/difference before after)
+                                      adds     (set/difference after before)
+                                      eid      (str id)]
+                                  (vec
+                                    (concat
+                                      (for [r retracts] [:db/retract eid k r])
+                                      (for [a adds] [:db/add eid k a]))))
 
                                 ;; Assume field is optional and omit
                                 (and (nil? before) (nil? after)) []
@@ -158,19 +161,22 @@
 (defn save-form
   "Do all of the possible Datomic operations for the given form delta (save to all Datomic databases involved)"
   [env form-delta]
-  (let [schemas (schemas-for-delta form-delta)]
+  (let [tempids (sp/select (sp/walker tempid/tempid?) form-delta)
+        fulcro-tempid->real-id
+                (into {} (map (fn [t] [t (d/squuid)]) tempids))
+        schemas (schemas-for-delta (::form/delta form-delta))]
     (log/info "Saving form across " schemas)
     (doseq [schema schemas
             :let [connection (-> env ::connections (get schema))
-                  txn        (delta->datomic-txn schema (::form/delta form-delta))]]
+                  txn        (delta->datomic-txn schema (::form/delta form-delta))
+                  txn        (sp/transform (sp/walker tempid/tempid?) fulcro-tempid->real-id txn)]]
       (log/info "Saving form delta" form-delta)
       (log/info "on schema" schema)
       (log/info "Running txn" txn)
       (if (and connection (seq txn))
         @(d/transact connection txn)
-        (log/error "Unable to save form. Either connection was missing in env, or txn was empty."))))
-  ;; TASK: tempid remappings
-  {})
+        (log/error "Unable to save form. Either connection was missing in env, or txn was empty.")))
+    fulcro-tempid->real-id))
 
 (def suggested-logging-blacklist
   "A vector containing a list of namespace strings that generate a lot of debug noise when using Datomic. Can
@@ -248,6 +254,8 @@
    that have a `::datomic/schema` that matches `schema-name`."
   [schema-name]
   [keyword? => vector?]
+  (when (empty? @attr/attribute-registry)
+    (log/warn "Automatic schema requested, but the attribute registry is empty. No schema will be generated!"))
   (let [txn (attribute-schema schema-name)
         txn (into txn (enumerated-values schema-name))]
     txn))
@@ -335,12 +343,15 @@
   "Starts a Datomic database connection given the standard sub-element config described
   in `start-databases`. Typically use that function instead of this one.
 
+  NOTE: This function relies on the attribute registry, which you must populate before
+  calling this.
+
 
   * `:config` a map of k-v pairs for setting up a connection.
-  * `schemas` a map from schema name to either :auto, :none, or (fn [k conn]).
+  * `schemas` a map from schema name to either :auto, :none, or (fn [conn]).
 
   Returns a migrated database connection."
-  [{:datomic/keys [driver schema prevent-changes?] :as config} schemas]
+  [{:datomic/keys [schema prevent-changes?] :as config} schemas]
   (let [url             (config->url config)
         generator       (get schemas schema :auto)
         _               (d/create-database url)
