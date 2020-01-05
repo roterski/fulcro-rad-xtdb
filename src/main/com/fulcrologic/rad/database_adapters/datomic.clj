@@ -3,6 +3,7 @@
     [cljs.spec.alpha :as s]
     [clojure.set :as set]
     [clojure.walk :as walk]
+    [clojure.pprint :refer [pprint]]
     [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
     [com.fulcrologic.guardrails.core :refer [>defn => ?]]
     [com.fulcrologic.rad.attributes :as attr]
@@ -168,13 +169,16 @@
     (log/info "Saving form across " schemas)
     (doseq [schema schemas
             :let [connection (-> env ::connections (get schema))
-                  txn        (delta->datomic-txn schema (::form/delta form-delta))
-                  txn        (sp/transform (sp/walker tempid/tempid?) fulcro-tempid->real-id txn)]]
+                  form-delta (sp/transform (sp/walker tempid/tempid?) fulcro-tempid->real-id form-delta)
+                  txn        (delta->datomic-txn schema (::form/delta form-delta))]]
       (log/info "Saving form delta" form-delta)
       (log/info "on schema" schema)
-      (log/info "Running txn" txn)
+      (log/info "Running txn\n" (with-out-str (pprint txn)))
       (if (and connection (seq txn))
-        @(d/transact connection txn)
+        (let [database-atom (get-in env [::databases schema])]
+          @(d/transact connection txn)
+          (when database-atom
+            (reset! database-atom (d/db connection))))
         (log/error "Unable to save form. Either connection was missing in env, or txn was empty.")))
     fulcro-tempid->real-id))
 
@@ -260,49 +264,6 @@
         txn (into txn (enumerated-values schema-name))]
     txn))
 
-(let [db-url      (fn [] (str "datomic:mem://" (gensym "test-database")))
-      pristine-db (atom nil)
-      migrated-db (atom {})
-      setup!      (fn [schema txn]
-                    (locking pristine-db
-                      (when-not @pristine-db
-                        (let [db-url (db-url)
-                              _      (log/info "Creating test database" db-url)
-                              _      (d/create-database db-url)
-                              conn   (d/connect db-url)]
-                          (reset! pristine-db (d/db conn))))
-                      (when-not (get @migrated-db schema)
-                        (let [conn (dm/mock-conn @pristine-db)
-                              txn  (if (vector? txn) txn (automatic-schema schema))]
-                          (log/debug "Transacting schema: " txn)
-                          @(d/transact conn txn)
-                          (swap! migrated-db assoc schema (d/db conn))))))]
-  (defn empty-db-connection
-    "Returns a Datomic database that contains the given application schema, but no data.
-     This function must be passed a schema name (keyword).  The optional second parameter
-     is the actual schema to use in the empty database, otherwise automatic generation will be used
-     against RAD attributes. This function memoizes the resulting database for speed.
-
-     See `reset-test-schema`."
-    ([schema-name]
-     (empty-db-connection schema-name nil))
-    ([schema-name txn]
-     (setup! schema-name txn)
-     (dm/mock-conn (get @migrated-db schema-name))))
-
-  (defn pristine-db-connection
-    "Returns a Datomic database that has no application schema or data."
-    []
-    (setup!)
-    (dm/mock-conn @pristine-db))
-
-  (defn reset-test-schema
-    "Reset the schema on the empty test database. This is necessary if you change the schema
-    and don't want to restart your REPL/Test env."
-    []
-    (reset! pristine-db nil)
-    (reset! migrated-db {})))
-
 (defn config->postgres-url [{:postgresql/keys [user host port password database]
                              datomic-db       :datomic/database}]
   (assert user ":postgresql/user must be specified")
@@ -380,10 +341,6 @@
   on the database reachable via `conn`. You may omit `schemas` if automatic generation is being used
   everywhere.
 
-TASK: Perhaps it makes sense to require the attributes as an explicit list so we don't have this
-stupid side-effect requirement for proper operation. That would return us to having a symbol to stand
-in for an attribute?
-
   WARNING: Be sure all of your model files are required before running this function, since it
   will use the attribute definitions during startup.
 
@@ -425,7 +382,7 @@ in for an attribute?
     ::attr/keys [qualified-key attributes]
     :as         env} input]
   (let [one? (not (sequential? input))]
-    (enc/if-let [db             (get-in env [::databases schema])
+    (enc/if-let [db             (some-> (get-in env [::databases schema]) deref)
                  query          (get env ::default-query)
                  ids            (if one?
                                   [(get input qualified-key)]
@@ -486,4 +443,48 @@ in for an attribute?
                                 []
                                 entity-id->attributes)]
     entity-resolvers))
+
+(let [db-url      (fn [] (str "datomic:mem://" (gensym "test-database")))
+      pristine-db (atom nil)
+      migrated-db (atom {})
+      setup!      (fn [schema txn]
+                    (locking pristine-db
+                      (when-not @pristine-db
+                        (let [db-url (db-url)
+                              _      (log/info "Creating test database" db-url)
+                              _      (d/create-database db-url)
+                              conn   (d/connect db-url)]
+                          (ensure-transactor-functions! conn)
+                          (reset! pristine-db (d/db conn))))
+                      (when-not (get @migrated-db schema)
+                        (let [conn (dm/mock-conn @pristine-db)
+                              txn  (if (vector? txn) txn (automatic-schema schema))]
+                          (log/debug "Transacting schema: " txn)
+                          @(d/transact conn txn)
+                          (swap! migrated-db assoc schema (d/db conn))))))]
+  (defn empty-db-connection
+    "Returns a Datomic database that contains the given application schema, but no data.
+     This function must be passed a schema name (keyword).  The optional second parameter
+     is the actual schema to use in the empty database, otherwise automatic generation will be used
+     against RAD attributes. This function memoizes the resulting database for speed.
+
+     See `reset-test-schema`."
+    ([schema-name]
+     (empty-db-connection schema-name nil))
+    ([schema-name txn]
+     (setup! schema-name txn)
+     (dm/mock-conn (get @migrated-db schema-name))))
+
+  (defn pristine-db-connection
+    "Returns a Datomic database that has no application schema or data."
+    []
+    (setup!)
+    (dm/mock-conn @pristine-db))
+
+  (defn clear-test-schema!
+    "Reset the schema on the empty test database. This is necessary if you change the schema
+    and don't want to restart your REPL/Test env."
+    []
+    (reset! pristine-db nil)
+    (reset! migrated-db {})))
 

@@ -13,6 +13,7 @@
 (declare =>)
 
 (defn with-registry [tests]
+  (datomic/clear-test-schema!)
   (attr/clear-registry!)
   (attr/register-attributes! person/attributes)
   (attr/register-attributes! address/attributes)
@@ -25,10 +26,10 @@
   (let [conn             (datomic/empty-db-connection :production)
         tpid             (tempid/tempid)
         taid             (tempid/tempid)
-        new-entity-delta {[::person/id tpid]  {::person/id        tpid
+        new-entity-delta {[::person/id tpid]  {::person/id        {:after tpid}
                                                ::person/email     {:after "test@example.com"}
                                                ::person/addresses {:after [[::address/id taid]]}}
-                          [::address/id taid] {::address/id     taid
+                          [::address/id taid] {::address/id     {:after taid}
                                                ::address/street "111 Main St"}}
         env              {::datomic/connections {:production conn}}
         result           (datomic/save-form env {::form/delta new-entity-delta})]
