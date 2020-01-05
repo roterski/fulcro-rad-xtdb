@@ -159,7 +159,7 @@
                    all-keys)]
     schemas))
 
-(defn save-form
+(defn save-form!
   "Do all of the possible Datomic operations for the given form delta (save to all Datomic databases involved)"
   [env form-delta]
   (let [tempids (sp/select (sp/walker tempid/tempid?) form-delta)
@@ -181,6 +181,20 @@
             (reset! database-atom (d/db connection))))
         (log/error "Unable to save form. Either connection was missing in env, or txn was empty.")))
     fulcro-tempid->real-id))
+
+(defn delete-entity!
+  "Delete the given entity, if possible."
+  [env [pk id :as ident]]
+  (enc/if-let [{::keys [schema]} (attr/key->attribute pk)
+               connection (-> env ::connections (get schema))
+               txn        [[:db/retractEntity ident]]]
+    (do
+      (log/info "Deleting" ident)
+      (let [database-atom (get-in env [::databases schema])]
+        @(d/transact connection txn)
+        (when database-atom
+          (reset! database-atom (d/db connection)))))
+    (log/debug "Datomic cannot delete ident " ident)))
 
 (def suggested-logging-blacklist
   "A vector containing a list of namespace strings that generate a lot of debug noise when using Datomic. Can
@@ -488,3 +502,15 @@
     (reset! pristine-db nil)
     (reset! migrated-db {})))
 
+(defn add-datomic-env
+  "Adds runtime Datomic info to pathom `env` so that resolvers will work correctly.
+
+  `database-connection-map` is a map from schema name (keyword) to database connection."
+  [env database-connection-map]
+  (let [databases (sp/transform [sp/MAP-VALS] (fn [v] (atom (d/db v))) database-connection-map)]
+    (-> env
+      (assoc
+        ::connections database-connection-map
+        ::databases databases)
+      (update ::form/save-handlers (fnil conj []) save-form!)
+      (update ::form/delete-handlers (fnil conj []) delete-entity!))))

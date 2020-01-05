@@ -32,7 +32,7 @@
                           [::address/id taid] {::address/id     {:after taid}
                                                ::address/street "111 Main St"}}
         env              {::datomic/connections {:production conn}}
-        result           (datomic/save-form env {::form/delta new-entity-delta})]
+        result           (datomic/save-form! env {::form/delta new-entity-delta})]
     (assertions
       "Returns proper tempid remapping for person"
       (contains? result tpid) => true
