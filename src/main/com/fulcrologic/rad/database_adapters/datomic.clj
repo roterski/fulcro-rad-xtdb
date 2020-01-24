@@ -232,51 +232,50 @@
    "org.quartz.utils.UpdateChecker"
    "shadow.cljs.devtools.server.worker.impl"])
 
-(defn- attribute-schema [schema-name]
-  (let [attributes (filter #(= schema-name (::schema %)) (vals @attr/attribute-registry))]
-    (mapv
-      (fn [{::attr/keys [unique? identity? type qualified-key cardinality] :as a}]
-        (let [overrides    (select-keys-in-ns a "db")
-              datomic-type (get type-map type)]
-          (when-not datomic-type
-            (throw (ex-info (str "No mapping from attribute type to Datomic: " type) {})))
-          (merge
-            (cond-> {:db/ident       qualified-key
-                     :db/cardinality (if (= :many cardinality)
-                                       :db.cardinality/many
-                                       :db.cardinality/one)
-                     :db/index       true
-                     :db/valueType   datomic-type}
-              unique? (assoc :db/unique :db.unique/value)
-              identity? (assoc :db/unique :db.unique/identity))
-            overrides)))
-      attributes)))
+(defn- attribute-schema [attributes]
+  (mapv
+    (fn [{::attr/keys [unique? identity? type qualified-key cardinality] :as a}]
+      (let [overrides    (select-keys-in-ns a "db")
+            datomic-type (get type-map type)]
+        (when-not datomic-type
+          (throw (ex-info (str "No mapping from attribute type to Datomic: " type) {})))
+        (merge
+          (cond-> {:db/ident       qualified-key
+                   :db/cardinality (if (= :many cardinality)
+                                     :db.cardinality/many
+                                     :db.cardinality/one)
+                   :db/index       true
+                   :db/valueType   datomic-type}
+            unique? (assoc :db/unique :db.unique/value)
+            identity? (assoc :db/unique :db.unique/identity))
+          overrides)))
+    attributes))
 
-(defn- enumerated-values [schema-name]
-  (let [attributes (filter #(= schema-name (::schema %)) (vals @attr/attribute-registry))]
-    (mapcat
-      (fn [{::attr/keys [qualified-key type enumerated-values] :as a}]
-        (when (= :enum type)
-          (let [enum-nspc (str (namespace qualified-key) "." (name qualified-key))]
-            (keep (fn [v]
-                    (cond
-                      (map? v) v
-                      (qualified-keyword? v) {:db/ident v}
-                      :otherwise (let [enum-ident (keyword enum-nspc (name v))]
-                                   {:db/ident enum-ident})))
-              enumerated-values))))
-      attributes)))
+(defn- enumerated-values [attributes]
+  (mapcat
+    (fn [{::attr/keys [qualified-key type enumerated-values] :as a}]
+      (when (= :enum type)
+        (let [enum-nspc (str (namespace qualified-key) "." (name qualified-key))]
+          (keep (fn [v]
+                  (cond
+                    (map? v) v
+                    (qualified-keyword? v) {:db/ident v}
+                    :otherwise (let [enum-ident (keyword enum-nspc (name v))]
+                                 {:db/ident enum-ident})))
+            enumerated-values))))
+    attributes))
 
 (>defn automatic-schema
-  "Returns a Datomic transaction for the complete schema that is represented in the RAD attributes
+  "Returns a Datomic transaction for the complete schema of the supplied RAD `attributes`
    that have a `::datomic/schema` that matches `schema-name`."
-  [schema-name]
-  [keyword? => vector?]
-  (when (empty? @attr/attribute-registry)
-    (log/warn "Automatic schema requested, but the attribute registry is empty. No schema will be generated!"))
-  (let [txn (attribute-schema schema-name)
-        txn (into txn (enumerated-values schema-name))]
-    txn))
+  [attributes schema-name]
+  [::attr/attributes keyword? => vector?]
+  (let [attributes (filter #(= schema-name (::schema %)) attributes)]
+    (when (empty? attributes)
+      (log/warn "Automatic schema requested, but the attribute list is empty. No schema will be generated!"))
+    (let [txn (attribute-schema attributes)
+          txn (into txn (enumerated-values attributes))]
+      txn)))
 
 (defn config->postgres-url [{:postgresql/keys [user host port password database]
                              datomic-db       :datomic/database}]
@@ -321,12 +320,13 @@
   NOTE: This function relies on the attribute registry, which you must populate before
   calling this.
 
+  `all-attributes
 
   * `:config` a map of k-v pairs for setting up a connection.
   * `schemas` a map from schema name to either :auto, :none, or (fn [conn]).
 
   Returns a migrated database connection."
-  [{:datomic/keys [schema prevent-changes?] :as config} schemas]
+  [all-attributes {:datomic/keys [schema prevent-changes?] :as config} schemas]
   (let [url             (config->url config)
         generator       (get schemas schema :auto)
         _               (d/create-database url)
@@ -336,8 +336,9 @@
     (log/info "Adding form save support to database transactor functions.")
     (ensure-transactor-functions! conn)
     (cond
-      (= :auto generator) (let [txn (automatic-schema schema)]
+      (= :auto generator) (let [txn (automatic-schema all-attributes schema)]
                             (log/info "Transacting automatic schema.")
+                            (log/debug "Schema:\n" (with-out-str (pprint txn)))
                             @(d/transact conn txn))
       (ifn? generator) (do
                          (log/info "Running custom schema function.")
@@ -381,13 +382,13 @@
   Returns a map whose keys are the database keys (i.e. `:production-shard-1`) and
   whose values are the live database connection.
   "
-  ([config]
-   (start-databases config {}))
-  ([config schemas]
+  ([all-attributes config]
+   (start-databases all-attributes config {}))
+  ([all-attributes config schemas]
    (reduce-kv
      (fn [m k v]
        (log/info "Starting database " k)
-       (assoc m k (start-database! v schemas)))
+       (assoc m k (start-database! all-attributes v schemas)))
      {}
      (::databases config))))
 
@@ -458,49 +459,63 @@
                                 entity-id->attributes)]
     entity-resolvers))
 
-(let [db-url      (fn [] (str "datomic:mem://" (gensym "test-database")))
-      pristine-db (atom nil)
-      migrated-db (atom {})
-      setup!      (fn [schema txn]
-                    (locking pristine-db
-                      (when-not @pristine-db
-                        (let [db-url (db-url)
-                              _      (log/info "Creating test database" db-url)
-                              _      (d/create-database db-url)
-                              conn   (d/connect db-url)]
-                          (ensure-transactor-functions! conn)
-                          (reset! pristine-db (d/db conn))))
-                      (when-not (get @migrated-db schema)
-                        (let [conn (dm/mock-conn @pristine-db)
-                              txn  (if (vector? txn) txn (automatic-schema schema))]
-                          (log/debug "Transacting schema: " txn)
-                          @(d/transact conn txn)
-                          (swap! migrated-db assoc schema (d/db conn))))))]
-  (defn empty-db-connection
-    "Returns a Datomic database that contains the given application schema, but no data.
-     This function must be passed a schema name (keyword).  The optional second parameter
-     is the actual schema to use in the empty database, otherwise automatic generation will be used
-     against RAD attributes. This function memoizes the resulting database for speed.
+(def ^:private pristine-db (atom nil))
+(def ^:private migrated-dbs (atom {}))
 
-     See `reset-test-schema`."
-    ([schema-name]
-     (empty-db-connection schema-name nil))
-    ([schema-name txn]
-     (setup! schema-name txn)
-     (dm/mock-conn (get @migrated-db schema-name))))
+(defn pristine-db-connection
+  "Returns a Datomic database that has no application schema or data."
+  []
+  (locking pristine-db
+    (when-not @pristine-db
+      (let [db-url (str "datomic:mem://" (gensym "test-database"))
+            _      (log/info "Creating test database" db-url)
+            _      (d/create-database db-url)
+            conn   (d/connect db-url)]
+        (ensure-transactor-functions! conn)
+        (reset! pristine-db (d/db conn))))
+    (dm/mock-conn @pristine-db)))
 
-  (defn pristine-db-connection
-    "Returns a Datomic database that has no application schema or data."
-    []
-    (setup!)
-    (dm/mock-conn @pristine-db))
+(defn empty-db-connection
+  "Returns a Datomic database that contains the given application schema, but no data.
+   This function must be passed a schema name (keyword).  The optional second parameter
+   is the actual schema to use in the empty database, otherwise automatic generation will be used
+   against RAD attributes. This function memoizes the resulting database for speed.
 
-  (defn clear-test-schema!
-    "Reset the schema on the empty test database. This is necessary if you change the schema
-    and don't want to restart your REPL/Test env."
-    []
-    (reset! pristine-db nil)
-    (reset! migrated-db {})))
+   See `reset-test-schema`."
+  ([all-attributes schema-name]
+   (empty-db-connection all-attributes schema-name nil))
+  ([all-attributes schema-name txn]
+   (let [h (hash {:id         schema-name
+                  :attributes all-attributes})]
+     (locking migrated-dbs
+       (if-let [db (get @migrated-dbs h)]
+         (do
+           (log/info "Returning cached test db")
+           (dm/mock-conn db))
+         (let [base-connection (pristine-db-connection)
+               conn            (dm/mock-conn (d/db base-connection))
+               txn             (if (vector? txn) txn (automatic-schema all-attributes schema-name))]
+           (log/debug "Transacting schema: " (with-out-str (pprint txn)))
+           @(d/transact conn txn)
+           (let [db (d/db conn)]
+             (swap! migrated-dbs assoc h db)
+             (dm/mock-conn db))))))))
+
+(defn reset-migrated-dbs!
+  "Forget the cached versions of test databases obtained from empty-db-connection."
+  []
+  (reset! migrated-dbs {}))
+
+(defn mock-resolver-env
+  "Returns a mock env that has the ::connections and ::databases keys that would be present in
+  a properly-set-up pathom resolver `env` for a given single schema. This should be called *after*
+  you have seeded data against a `connection` that goes with the given schema.
+
+  * `schema` - A schema name
+  * `connection` - A database connection that is connected to a database with that schema."
+  [schema connection]
+  {::connections {schema connection}
+   ::databases   {schema (atom (d/db connection))}})
 
 (defn add-datomic-env
   "Adds runtime Datomic info to pathom `env` so that resolvers will work correctly.
