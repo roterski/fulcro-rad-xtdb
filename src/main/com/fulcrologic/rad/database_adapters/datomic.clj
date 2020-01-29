@@ -288,10 +288,12 @@
   (str "datomic:sql://" datomic-db "?jdbc:postgresql://" host (when port (str ":" port)) "/"
     database "?user=" user "&password=" password))
 
-(defn config->url [{:datomic/keys [driver] :as config}]
-  (case driver
-    :postgresql (config->postgres-url config)
-    (throw (ex-info "Unsupported Datomic back-end driver." {:driver driver}))))
+(defn config->url [{:datomic/keys [storage-protocol driver] :as config}]
+  (case storage-protocol
+    :mem (str "datomic:mem://" (:datomic/database config))
+    :sql (case driver
+           :postgresql (config->postgres-url config)
+           (throw (ex-info "Unsupported Datomic back-end driver." {:driver driver})))))
 
 (defn ensure-transactor-functions!
   "Must be called on any Datomic database that will be used with automatic form save. This
