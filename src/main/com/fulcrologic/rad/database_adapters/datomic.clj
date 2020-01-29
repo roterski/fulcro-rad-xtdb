@@ -333,6 +333,10 @@
         mock?           (boolean (or prevent-changes? (System/getProperty "force.mocked.connection")))
         real-connection (d/connect url)
         conn            (if mock? (dm/fork-conn real-connection) real-connection)]
+    (when mock?
+      (log/warn "==========================================================")
+      (log/warn "Database mocking enabled. No database changes will persist!")
+      (log/warn "=========================================================="))
     (log/info "Adding form save support to database transactor functions.")
     (ensure-transactor-functions! conn)
     (cond
