@@ -288,7 +288,9 @@
   (str "datomic:sql://" datomic-db "?jdbc:postgresql://" host (when port (str ":" port)) "/"
     database "?user=" user "&password=" password))
 
-(defn config->url [{:datomic/keys [storage-protocol driver] :as config}]
+(defn config->url [{:datomic/keys [storage-protocol driver]
+                    :or           {storage-protocol :sql}
+                    :as           config}]
   (case storage-protocol
     :mem (str "datomic:mem://" (:datomic/database config))
     :sql (case driver
