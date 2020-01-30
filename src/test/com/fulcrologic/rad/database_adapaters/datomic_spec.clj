@@ -12,8 +12,10 @@
 
 (declare =>)
 
+(def all-attributes (vec (concat person/attributes address/attributes)))
+
 (defn with-registry [tests]
-  (datomic/clear-test-schema!)
+  (datomic/reset-migrated-dbs!)
   (attr/clear-registry!)
   (attr/register-attributes! person/attributes)
   (attr/register-attributes! address/attributes)
@@ -23,7 +25,7 @@
 (use-fixtures :once with-registry)
 
 (specification "Saving an entity with tempids"
-  (let [conn             (datomic/empty-db-connection :production)
+  (let [conn             (datomic/empty-db-connection all-attributes :production)
         tpid             (tempid/tempid)
         taid             (tempid/tempid)
         new-entity-delta {[::person/id tpid]  {::person/id        {:after tpid}

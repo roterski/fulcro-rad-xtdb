@@ -17,11 +17,10 @@
    ::attr/required?     true})
 
 (defattr addresses ::addresses :ref
-  {::attr/target              :com.fulcrologic.rad.test-schema.address/id
-   ::attr/cardinality         :many
-   ::datomic/schema           :production
-   ::datomic/intended-targets #{:com.fulcrologic.rad.test-schema.address/id}
-   ::datomic/entity-ids       #{::id}
-   :db/isComponent            true})
+  {::attr/target        :com.fulcrologic.rad.test-schema.address/id
+   ::attr/cardinality   :many
+   ::datomic/schema     :production
+   ::datomic/entity-ids #{::id}
+   :db/isComponent      true})
 
 (def attributes [id name email addresses])
