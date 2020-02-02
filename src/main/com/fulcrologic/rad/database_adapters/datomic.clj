@@ -26,7 +26,7 @@
    :password :db.type/string
    :int      :db.type/long
    :long     :db.type/long
-   :money    :db.type/bigdec
+   :decimal  :db.type/bigdec
    :inst     :db.type/inst
    :keyword  :db.type/keyword
    :symbol   :db.type/symbol
