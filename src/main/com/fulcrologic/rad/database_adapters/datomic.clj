@@ -33,6 +33,7 @@
    :ref      :db.type/ref
    :uuid     :db.type/uuid})
 
+;; FIXME: There should be a client API query that runs on startup to find idents so that this is more efficient and also so we don't use the entity API.
 (defn replace-ref-types
   "dbc   the database to query
    refs  a set of keywords that ref datomic entities, which you want to access directly
