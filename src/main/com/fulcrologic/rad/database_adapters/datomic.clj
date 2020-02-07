@@ -27,7 +27,7 @@
    :int      :db.type/long
    :long     :db.type/long
    :decimal  :db.type/bigdec
-   :inst     :db.type/inst
+   :instant  :db.type/instant
    :keyword  :db.type/keyword
    :symbol   :db.type/symbol
    :ref      :db.type/ref
