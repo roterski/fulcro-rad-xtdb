@@ -167,14 +167,14 @@
         fulcro-tempid->real-id
                 (into {} (map (fn [t] [t (d/squuid)]) tempids))
         schemas (schemas-for-delta (::form/delta form-delta))]
-    (log/info "Saving form across " schemas)
+    (log/debug "Saving form across " schemas)
     (doseq [schema schemas
             :let [connection (-> env ::connections (get schema))
                   form-delta (sp/transform (sp/walker tempid/tempid?) fulcro-tempid->real-id form-delta)
                   txn        (delta->datomic-txn schema (::form/delta form-delta))]]
-      (log/info "Saving form delta" form-delta)
-      (log/info "on schema" schema)
-      (log/info "Running txn\n" (with-out-str (pprint txn)))
+      (log/debug "Saving form delta" form-delta)
+      (log/debug "on schema" schema)
+      (log/debug "Running txn\n" (with-out-str (pprint txn)))
       (if (and connection (seq txn))
         (let [database-atom (get-in env [::databases schema])]
           @(d/transact connection txn)
@@ -195,7 +195,7 @@
         @(d/transact connection txn)
         (when database-atom
           (reset! database-atom (d/db connection)))))
-    (log/debug "Datomic cannot delete ident " ident)))
+    (log/warn "Datomic adapter failed to delete ident " ident)))
 
 (def suggested-logging-blacklist
   "A vector containing a list of namespace strings that generate a lot of debug noise when using Datomic. Can
