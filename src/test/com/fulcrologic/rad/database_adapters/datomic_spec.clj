@@ -1,4 +1,4 @@
-(ns com.fulcrologic.rad.database-adapaters.datomic-spec
+(ns com.fulcrologic.rad.database-adapters.datomic-spec
   (:require
     [fulcro-spec.core :refer [specification assertions]]
     [com.fulcrologic.rad.form :as form]
