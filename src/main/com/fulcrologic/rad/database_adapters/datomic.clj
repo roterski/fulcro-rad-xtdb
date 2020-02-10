@@ -318,6 +318,34 @@
                                                               (str (second ident)))]
                                                 [[:db/add eid rel ref-val]]))})}]))
 
+(>defn verify-schema!
+  "Validate that a database supports then named `schema`. This function finds all attributes
+  that are declared on the schema, and checks that the Datomic representation of them
+  meets minimum requirements for desired operation.
+
+  This function throws an exception if a problem is found, and can be used in
+  applications that manage their own schema to ensure that the database will
+  operate correctly in RAD."
+  [db schema all-attributes]
+  [any? keyword? ::attr/attributes => any?]
+  (let [die! #(throw (ex-info "Validation Failed" {:schema schema}))]
+    (doseq [attr all-attributes
+            :let [{attr-schema      ::schema
+                   attr-cardinality ::attr/cardinality
+                   ::attr/keys      [qualified-key type]} attr]]
+      (when (= attr-schema schema)
+        (log/debug "Checking schema" schema "attribute" qualified-key)
+        (let [{:db/keys [cardinality valueType]} (d/pull db '[{:db/cardinality [:db/ident]} {:db/valueType [:db/ident]}] qualified-key)
+              cardinality (get cardinality :db/ident :one)
+              db-type     (get valueType :db/ident :unknown)]
+          (when (not= (get type-map type) db-type)
+            (log/error qualified-key "for schema" schema "is incorrect in the database. It has type" valueType
+              "but was expected to have type" (get type-map type))
+            (die!))
+          (when (not= (name cardinality) (name (or attr-cardinality :one)))
+            (log/error qualified-key "for schema" schema "is incorrect in the database, since cardinalities do not match:" (name cardinality) "vs" attr-cardinality)
+            (die!)))))))
+
 (defn start-database!
   "Starts a Datomic database connection given the standard sub-element config described
   in `start-databases`. Typically use that function instead of this one.
@@ -353,6 +381,7 @@
                          (log/info "Running custom schema function.")
                          (generator conn))
       :otherwise (log/info "Schema management disabled."))
+    (verify-schema! (d/db conn) schema all-attributes)
     (log/info "Finished connecting to and migrating database.")
     conn))
 
@@ -529,7 +558,11 @@
 (defn add-datomic-env
   "Adds runtime Datomic info to pathom `env` so that resolvers will work correctly.
 
-  `database-connection-map` is a map from schema name (keyword) to database connection."
+  `database-connection-map` is a map from schema name (keyword) to database connection.
+
+  NOTE: You do not have to use anything in this entire adapter *except* this function. You may use
+  your own schema and connection management strategy as long as you use this to augment your
+  Pathom env during request processing."
   [env database-connection-map]
   (let [databases (sp/transform [sp/MAP-VALS] (fn [v] (atom (d/db v))) database-connection-map)]
     (-> env
