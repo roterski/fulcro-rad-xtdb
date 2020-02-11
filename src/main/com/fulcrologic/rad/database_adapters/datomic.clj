@@ -143,15 +143,14 @@
       delta)))
 
 (def keys-in-delta
-  (memoize
-    (fn keys-in-delta [delta]
-      (let [id-keys  (into #{}
-                       (map first)
-                       (keys delta))
-            all-keys (into id-keys
-                       (mapcat keys)
-                       (vals delta))]
-        all-keys))))
+  (fn keys-in-delta [delta]
+    (let [id-keys  (into #{}
+                     (map first)
+                     (keys delta))
+          all-keys (into id-keys
+                     (mapcat keys)
+                     (vals delta))]
+      all-keys)))
 
 (defn schemas-for-delta [delta]
   (let [all-keys (keys-in-delta delta)
