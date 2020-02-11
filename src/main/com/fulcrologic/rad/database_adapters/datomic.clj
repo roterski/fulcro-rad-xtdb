@@ -91,55 +91,63 @@
   ;; TASK: test mapcat on nil (nothing on schema)
   (vec
     (mapcat (fn [[[id-k id] entity-diff]]
-              (when (-> id-k attr/key->attribute ::schema (= schema))
-                (conj
-                  (mapcat (fn [[k diff]]
-                            (let [{:keys [before after]} diff]
-                              (cond
-                                (ref->ident after) (if (nil? after)
-                                                     [[:db/retract (str id) k (ref->ident before)]]
-                                                     [[:com.fulcrologic.rad.fn/add-ident (str id) k (ref->ident after)]])
+              (let [id-attribute (attr/key->attribute id-k)]
+                (when (-> id-attribute ::schema (= schema))
+                  (conj
+                    (mapcat (fn [[k diff]]
+                              (let [{:keys [before after]} diff
+                                    {::attr/keys [cardinality type] :as attribute} (attr/key->attribute k)]
+                                (when-not attribute
+                                  (log/error "MISSING ATTRIBUTE IN ATTRIBUTE REGISTRY!" k))
+                                (cond
+                                  (and (= :enum (log/spy :info type)) (= :many (log/spy :info cardinality)))
+                                  (let [ident [id-k id]]
+                                    [[:com.fulcrologic.rad.fn/set-to-many-enumeration ident k (set after)]])
 
-                                (and (sequential? after) (every? ref->ident after))
-                                (let [before   (into #{}
-                                                 (comp (map ref->ident) (remove nil?))
-                                                 before)
-                                      after    (into #{}
-                                                 (comp (map ref->ident) (remove nil?))
-                                                 after)
-                                      retracts (set/difference before after)
-                                      adds     (set/difference after before)
-                                      eid      (str id)]
-                                  (vec
-                                    (concat
-                                      (for [r retracts] [:db/retract eid k r])
-                                      (for [a adds] [:com.fulcrologic.rad.fn/add-ident eid k a]))))
+                                  (ref->ident after) (if (nil? after)
+                                                       [[:db/retract (str id) k (ref->ident before)]]
+                                                       [[:com.fulcrologic.rad.fn/add-ident (str id) k (ref->ident after)]])
 
-                                (and (sequential? after) (every? keyword? after))
-                                (let [before   (into #{}
-                                                 (comp (remove nil?))
-                                                 before)
-                                      after    (into #{}
-                                                 (comp (remove nil?))
-                                                 after)
-                                      retracts (set/difference before after)
-                                      adds     (set/difference after before)
-                                      eid      (str id)]
-                                  (vec
-                                    (concat
-                                      (for [r retracts] [:db/retract eid k r])
-                                      (for [a adds] [:db/add eid k a]))))
+                                  (and (sequential? after) (every? ref->ident after))
+                                  (let [before   (into #{}
+                                                   (comp (map ref->ident) (remove nil?))
+                                                   before)
+                                        after    (into #{}
+                                                   (comp (map ref->ident) (remove nil?))
+                                                   after)
+                                        retracts (set/difference before after)
+                                        adds     (set/difference after before)
+                                        eid      (str id)]
+                                    (vec
+                                      (concat
+                                        (for [r retracts] [:db/retract eid k r])
+                                        (for [a adds] [:com.fulcrologic.rad.fn/add-ident eid k a]))))
 
-                                ;; Assume field is optional and omit
-                                (and (nil? before) (nil? after)) []
+                                  (and (sequential? after) (every? keyword? after))
+                                  (let [before   (into #{}
+                                                   (comp (remove nil?))
+                                                   before)
+                                        after    (into #{}
+                                                   (comp (remove nil?))
+                                                   after)
+                                        retracts (set/difference before after)
+                                        adds     (set/difference after before)
+                                        eid      (str id)]
+                                    (vec
+                                      (concat
+                                        (for [r retracts] [:db/retract eid k r])
+                                        (for [a adds] [:db/add eid k a]))))
 
-                                :else (if (nil? after)
-                                        (if (ref->ident before)
-                                          [[:db/retract (str id) k (ref->ident before)]]
-                                          [[:db/retract (str id) k before]])
-                                        [[:db/add (str id) k after]]))))
-                    entity-diff)
-                  {id-k id :db/id (str id)})))
+                                  ;; Assume field is optional and omit
+                                  (and (nil? before) (nil? after)) []
+
+                                  :else (if (nil? after)
+                                          (if (ref->ident before)
+                                            [[:db/retract (str id) k (ref->ident before)]]
+                                            [[:db/retract (str id) k before]])
+                                          [[:db/add (str id) k after]]))))
+                      entity-diff)
+                    {id-k id :db/id (str id)}))))
       delta)))
 
 (def keys-in-delta
@@ -304,6 +312,25 @@
   created database."
   [conn]
   @(d/transact conn [{:db/id    (d/tempid :db.part/user)
+                      :db/ident :com.fulcrologic.rad.fn/set-to-many-enumeration
+                      :db/fn    (df/construct
+                                  '{:lang   "clojure"
+                                    :params [db eid rel set-of-enumerated-values]
+                                    :code   (do
+                                              (when-not (every? qualified-keyword? set-of-enumerated-values)
+                                                (throw (IllegalArgumentException.
+                                                         (str "set-to-many-enumeration expects a set of keywords that are idents" set-of-enumerated-values))))
+                                              (let [old-val    (into #{}
+                                                                 (map :db/ident)
+                                                                 (get (datomic.api/pull db [{rel [:db/ident]}] eid) rel))
+                                                    to-retract (into []
+                                                                 (map (fn [k] [:db/retract eid rel k]))
+                                                                 (clojure.set/difference old-val set-of-enumerated-values))
+                                                    txn        (into to-retract
+                                                                 (map (fn [k] [:db/add eid rel k]))
+                                                                 (clojure.set/difference set-of-enumerated-values old-val))]
+                                                txn))})}
+                     {:db/id    (d/tempid :db.part/user)
                       :db/ident :com.fulcrologic.rad.fn/add-ident
                       :db/fn    (df/construct
                                   '{:lang   "clojure"
@@ -383,6 +410,13 @@
     (verify-schema! (d/db conn) schema all-attributes)
     (log/info "Finished connecting to and migrating database.")
     conn))
+
+(defn adapt-external-database!
+  "Adds necessary transactor functions and verifies schema of a Datomic database that is not
+  under the control of this adapter, but is used by it."
+  [conn schema all-attributes]
+  (ensure-transactor-functions! conn)
+  (verify-schema! (d/db conn) schema all-attributes))
 
 (defn start-databases
   "Start all of the databases described in config, using the schemas defined in schemas.
