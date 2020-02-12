@@ -100,7 +100,7 @@
                                 (when-not attribute
                                   (log/error "MISSING ATTRIBUTE IN ATTRIBUTE REGISTRY!" k))
                                 (cond
-                                  (and (= :enum (log/spy :info type)) (= :many (log/spy :info cardinality)))
+                                  (and (= :enum type) (= :many cardinality))
                                   (let [ident [id-k id]]
                                     [[:com.fulcrologic.rad.fn/set-to-many-enumeration ident k (set after)]])
 
