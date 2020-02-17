@@ -88,7 +88,6 @@
   "Takes in a normalized form delta, usually from client, and turns in
   into a Datomic transaction for the given schema (returns empty txn if there is nothing on the delta for that schema)."
   [schema delta]
-  ;; TASK: test mapcat on nil (nothing on schema)
   (vec
     (mapcat (fn [[[id-k id] entity-diff]]
               (let [id-attribute (attr/key->attribute id-k)]
@@ -100,7 +99,7 @@
                                 (when-not attribute
                                   (log/error "MISSING ATTRIBUTE IN ATTRIBUTE REGISTRY!" k))
                                 (cond
-                                  (and (= :enum (log/spy :info type)) (= :many (log/spy :info cardinality)))
+                                  (and (= :enum type) (= :many cardinality))
                                   (let [ident [id-k id]]
                                     [[:com.fulcrologic.rad.fn/set-to-many-enumeration ident k (set after)]])
 
@@ -326,6 +325,7 @@
                                                     to-retract (into []
                                                                  (map (fn [k] [:db/retract eid rel k]))
                                                                  (clojure.set/difference old-val set-of-enumerated-values))
+                                                    eid        (or (:db/id (datomic.api/pull db [:db/id] eid)) (str (second eid)))
                                                     txn        (into to-retract
                                                                  (map (fn [k] [:db/add eid rel k]))
                                                                  (clojure.set/difference set-of-enumerated-values old-val))]
