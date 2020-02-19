@@ -95,10 +95,11 @@
                   (conj
                     (mapcat (fn [[k diff]]
                               (let [{:keys [before after]} diff
-                                    {::attr/keys [cardinality type] :as attribute} (attr/key->attribute k)]
+                                    {::attr/keys [internal? cardinality type] :as attribute} (attr/key->attribute k)]
                                 (when-not attribute
                                   (log/error "MISSING ATTRIBUTE IN ATTRIBUTE REGISTRY!" k))
                                 (cond
+                                  internal? []
                                   (and (= :enum type) (= :many cardinality))
                                   (let [ident [id-k id]]
                                     [[:com.fulcrologic.rad.fn/set-to-many-enumeration ident k (set after)]])
