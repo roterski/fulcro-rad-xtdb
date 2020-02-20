@@ -636,7 +636,7 @@
 (defn wrap-datomic-save
   "Form save middleware to accomplish Datomic saves."
   ([]
-   (fn [{::form/keys [pathom-env params] :as save-env}]
+   (fn [{::form/keys [pathom-env params]}]
      (let [save-result (save-form! pathom-env params)]
        save-result)))
   ([handler]
