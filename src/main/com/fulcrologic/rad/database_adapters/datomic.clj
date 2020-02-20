@@ -296,14 +296,32 @@
   (str "datomic:sql://" datomic-db "?jdbc:postgresql://" host (when port (str ":" port)) "/"
     database "?user=" user "&password=" password))
 
-(defn config->url [{:datomic/keys [storage-protocol driver]
-                    :or           {storage-protocol :sql}
+(defn config->mysql-url [{:mysql/keys [user host port password database]
+                          datomic-db       :datomic/database}]
+  (assert user ":mysql/user must be specified")
+  (assert host ":mysql/host must be specified")
+  (assert port ":mysql/port must be specified")
+  (assert password ":mysql/password must be specified")
+  (assert database ":mysql/database must be specified")
+  (assert datomic-db ":datomic/database must be specified")
+  (str "datomic:sql://" datomic-db "?jdbc:mysql://" host (when port (str ":" port)) "/"
+    database "?user=" user "&password=" password "&useSSL=false"))
+
+(defn config->free-url [{:free/keys [host port]
+                         datomic-db :datomic/database}]
+  (assert host ":free/host must be specified")
+  (assert port ":free/port must be specified")
+  (assert datomic-db ":datomic/database must be specified")
+  (str "datomic:free://" host ":" port "/" datomic-db))
+
+(defn config->url [{:datomic/keys [driver]
                     :as           config}]
-  (case storage-protocol
+  (case driver
     :mem (str "datomic:mem://" (:datomic/database config))
-    :sql (case driver
-           :postgresql (config->postgres-url config)
-           (throw (ex-info "Unsupported Datomic back-end driver." {:driver driver})))))
+    :free (config->free-url config)
+    :postgresql (config->postgres-url config)
+    :mysql (config->mysql-url config)
+    (throw (ex-info "Unsupported Datomic driver." {:driver driver}))))
 
 (defn ensure-transactor-functions!
   "Must be called on any Datomic database that will be used with automatic form save. This
