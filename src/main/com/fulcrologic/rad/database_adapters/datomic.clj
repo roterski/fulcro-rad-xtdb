@@ -172,7 +172,7 @@
 (defn save-form!
   "Do all of the possible Datomic operations for the given form delta (save to all Datomic databases involved)"
   [env save-params]
-  (let [tempids (sp/select (sp/walker tempid/tempid?) save-params)
+  (let [tempids (set (sp/select (sp/walker tempid/tempid?) save-params))
         fulcro-tempid->real-id
                 (into {} (map (fn [t] [t (d/squuid)]) tempids))
         schemas (schemas-for-delta (::form/delta save-params))]
@@ -181,7 +181,7 @@
             :let [connection (-> env ::connections (get schema))
                   form-delta (sp/transform (sp/walker tempid/tempid?) fulcro-tempid->real-id save-params)
                   txn        (delta->datomic-txn schema (::form/delta form-delta))]]
-      (log/debug "Saving form delta" form-delta)
+      (log/debug "Saving form delta" (with-out-str (pprint form-delta)))
       (log/debug "on schema" schema)
       (log/debug "Running txn\n" (with-out-str (pprint txn)))
       (if (and connection (seq txn))
@@ -190,7 +190,7 @@
           (when database-atom
             (reset! database-atom (d/db connection))))
         (log/error "Unable to save form. Either connection was missing in env, or txn was empty.")))
-    fulcro-tempid->real-id))
+    {:tempids fulcro-tempid->real-id}))
 
 (defn delete-entity!
   "Delete the given entity, if possible."
@@ -203,7 +203,8 @@
       (let [database-atom (get-in env [::databases schema])]
         @(d/transact connection txn)
         (when database-atom
-          (reset! database-atom (d/db connection)))))
+          (reset! database-atom (d/db connection)))
+        {}))
     (log/warn "Datomic adapter failed to delete ident " ident)))
 
 (def suggested-logging-blacklist
