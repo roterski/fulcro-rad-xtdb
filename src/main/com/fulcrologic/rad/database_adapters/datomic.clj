@@ -245,7 +245,8 @@
 
 (defn- attribute-schema [attributes]
   (mapv
-    (fn [{::attr/keys [unique? identity? type qualified-key cardinality] :as a}]
+    (fn [{::attr/keys [identity? type qualified-key cardinality]
+          ::keys      [attribute-schema] :as a}]
       (let [overrides    (select-keys-in-ns a "db")
             datomic-type (get type-map type)]
         (when-not datomic-type
@@ -257,7 +258,7 @@
                                      :db.cardinality/one)
                    :db/index       true
                    :db/valueType   datomic-type}
-            unique? (assoc :db/unique :db.unique/value)
+            (map? attribute-schema) (merge attribute-schema)
             identity? (assoc :db/unique :db.unique/identity))
           overrides)))
     attributes))
