@@ -5,6 +5,7 @@
     [clojure.walk :as walk]
     [clojure.pprint :refer [pprint]]
     [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
+    [com.fulcrologic.fulcro.algorithms.do-not-use :refer [deep-merge]]
     [com.fulcrologic.guardrails.core :refer [>defn => ?]]
     [com.fulcrologic.rad.attributes :as attr]
     [com.fulcrologic.rad.authorization :as auth]
@@ -12,6 +13,7 @@
     [com.fulcrologic.rad.ids :refer [select-keys-in-ns]]
     [com.rpl.specter :as sp]
     [com.wsscode.pathom.connect :as pc]
+    [com.wsscode.pathom.core :as p]
     [datomic.api :as d]
     [datomic.function :as df]
     [datomock.core :as dm :refer [mock-conn]]
@@ -95,10 +97,11 @@
                   (conj
                     (mapcat (fn [[k diff]]
                               (let [{:keys [before after]} diff
-                                    {::attr/keys [cardinality type] :as attribute} (attr/key->attribute k)]
+                                    {::attr/keys [internal? cardinality type] :as attribute} (attr/key->attribute k)]
                                 (when-not attribute
                                   (log/error "MISSING ATTRIBUTE IN ATTRIBUTE REGISTRY!" k))
                                 (cond
+                                  internal? []
                                   (and (= :enum type) (= :many cardinality))
                                   (let [ident [id-k id]]
                                     [[:com.fulcrologic.rad.fn/set-to-many-enumeration ident k (set after)]])
@@ -168,17 +171,17 @@
 
 (defn save-form!
   "Do all of the possible Datomic operations for the given form delta (save to all Datomic databases involved)"
-  [env form-delta]
-  (let [tempids (sp/select (sp/walker tempid/tempid?) form-delta)
+  [env save-params]
+  (let [tempids (set (sp/select (sp/walker tempid/tempid?) save-params))
         fulcro-tempid->real-id
                 (into {} (map (fn [t] [t (d/squuid)]) tempids))
-        schemas (schemas-for-delta (::form/delta form-delta))]
+        schemas (schemas-for-delta (::form/delta save-params))]
     (log/debug "Saving form across " schemas)
     (doseq [schema schemas
             :let [connection (-> env ::connections (get schema))
-                  form-delta (sp/transform (sp/walker tempid/tempid?) fulcro-tempid->real-id form-delta)
+                  form-delta (sp/transform (sp/walker tempid/tempid?) fulcro-tempid->real-id save-params)
                   txn        (delta->datomic-txn schema (::form/delta form-delta))]]
-      (log/debug "Saving form delta" form-delta)
+      (log/debug "Saving form delta" (with-out-str (pprint form-delta)))
       (log/debug "on schema" schema)
       (log/debug "Running txn\n" (with-out-str (pprint txn)))
       (if (and connection (seq txn))
@@ -187,7 +190,7 @@
           (when database-atom
             (reset! database-atom (d/db connection))))
         (log/error "Unable to save form. Either connection was missing in env, or txn was empty.")))
-    fulcro-tempid->real-id))
+    {:tempids fulcro-tempid->real-id}))
 
 (defn delete-entity!
   "Delete the given entity, if possible."
@@ -200,7 +203,8 @@
       (let [database-atom (get-in env [::databases schema])]
         @(d/transact connection txn)
         (when database-atom
-          (reset! database-atom (d/db connection)))))
+          (reset! database-atom (d/db connection)))
+        {}))
     (log/warn "Datomic adapter failed to delete ident " ident)))
 
 (def suggested-logging-blacklist
@@ -295,14 +299,32 @@
   (str "datomic:sql://" datomic-db "?jdbc:postgresql://" host (when port (str ":" port)) "/"
     database "?user=" user "&password=" password))
 
-(defn config->url [{:datomic/keys [storage-protocol driver]
-                    :or           {storage-protocol :sql}
+(defn config->mysql-url [{:mysql/keys [user host port password database]
+                          datomic-db  :datomic/database}]
+  (assert user ":mysql/user must be specified")
+  (assert host ":mysql/host must be specified")
+  (assert port ":mysql/port must be specified")
+  (assert password ":mysql/password must be specified")
+  (assert database ":mysql/database must be specified")
+  (assert datomic-db ":datomic/database must be specified")
+  (str "datomic:sql://" datomic-db "?jdbc:mysql://" host (when port (str ":" port)) "/"
+    database "?user=" user "&password=" password "&useSSL=false"))
+
+(defn config->free-url [{:free/keys [host port]
+                         datomic-db :datomic/database}]
+  (assert host ":free/host must be specified")
+  (assert port ":free/port must be specified")
+  (assert datomic-db ":datomic/database must be specified")
+  (str "datomic:free://" host ":" port "/" datomic-db))
+
+(defn config->url [{:datomic/keys [driver]
                     :as           config}]
-  (case storage-protocol
+  (case driver
     :mem (str "datomic:mem://" (:datomic/database config))
-    :sql (case driver
-           :postgresql (config->postgres-url config)
-           (throw (ex-info "Unsupported Datomic back-end driver." {:driver driver})))))
+    :free (config->free-url config)
+    :postgresql (config->postgres-url config)
+    :mysql (config->mysql-url config)
+    (throw (ex-info "Unsupported Datomic driver." {:driver driver}))))
 
 (defn ensure-transactor-functions!
   "Must be called on any Datomic database that will be used with automatic form save. This
@@ -588,19 +610,49 @@
   {::connections {schema connection}
    ::databases   {schema (atom (d/db connection))}})
 
-(defn add-datomic-env
-  "Adds runtime Datomic info to pathom `env` so that resolvers will work correctly.
+(defn pathom-plugin
+  "A pathom plugin that adds the necessary Datomic connections and databases to the pathom env for
+  a given request. Requires a database-mapper, which is a
+  `(fn [pathom-env] {schema-name connection})` for a given request.
 
-  `database-connection-map` is a map from schema name (keyword) to database connection.
+  The resulting pathom-env available to all resolvers will then have:
 
-  NOTE: You do not have to use anything in this entire adapter *except* this function. You may use
-  your own schema and connection management strategy as long as you use this to augment your
-  Pathom env during request processing."
-  [env database-connection-map]
-  (let [databases (sp/transform [sp/MAP-VALS] (fn [v] (atom (d/db v))) database-connection-map)]
-    (-> env
-      (assoc
-        ::connections database-connection-map
-        ::databases databases)
-      (update ::form/save-handlers (fnil conj []) save-form!)
-      (update ::form/delete-handlers (fnil conj []) delete-entity!))))
+  - `::datomic/connections`: The result of database-mapper
+  - `::datomic/databases`: A map from schema name to atoms holding a database. The atom is present so that
+  a mutation that modifies the database can choose to update the snapshot of the db being used for the remaining
+  resolvers.
+
+  This plugin should run before (be listed after) most other plugins in the plugin chain since
+  it adds connection details to the parsing env.
+  "
+  [database-mapper]
+  (p/env-wrap-plugin
+    (fn [env]
+      (let [database-connection-map (database-mapper env)
+            databases               (sp/transform [sp/MAP-VALS] (fn [v] (atom (d/db v))) database-connection-map)]
+        (assoc env
+          ::connections database-connection-map
+          ::databases databases)))))
+
+(defn wrap-datomic-save
+  "Form save middleware to accomplish Datomic saves."
+  ([]
+   (fn [{::form/keys [pathom-env params]}]
+     (let [save-result (save-form! pathom-env params)]
+       save-result)))
+  ([handler]
+   (fn [{::form/keys [pathom-env params] :as save-env}]
+     (let [save-result    (save-form! pathom-env params)
+           handler-result (handler save-env)]
+       (deep-merge save-result handler-result)))))
+
+(defn wrap-datomic-delete
+  "Form delete middleware to accomplish datomic deletes."
+  ([handler]
+   (fn [{::form/keys [pathom-env params]}]
+     (let [local-result   (delete-entity! pathom-env params)
+           handler-result (handler pathom-env)]
+       (deep-merge handler-result local-result))))
+  ([]
+   (fn [{::form/keys [pathom-env params]}]
+     (delete-entity! pathom-env params))))

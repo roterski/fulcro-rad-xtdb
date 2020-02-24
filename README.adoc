@@ -2,8 +2,7 @@
 
 This is a plugin for Fulcro RAD that adds support for using Datomic databases as the back-end technology.
 
-NOTE: The current version only supports on-prem with a PostgreSQL store. There is
-nothing in the design that requires this, it has just not yet been generalized.
+NOTE: The current version supports on-prem Datomic Pro (PostgreSQL or MySQL backends), Datomic Free, or Mem stores.
 
 == Conventions
 
@@ -185,34 +184,25 @@ can use `(datomic/reset-test-schema k)` to forget the current memoized version.
 
 We use git (with git flow) for source control. Please branch and make PRs against the `develop` branch.
 
-The source of this repository includes an example application that can be used when developing features.
-It is enabled on the source path using the Clj deps `dev` alias. This alias also overrides the `fulcro-rad` dependency
-to a local disk directory (you need to check out and edit deps). This allows you to work on the RAD source code
-at the same time as the Datomic and example code.
+There is an example application https://github.com/fulcrologic/fulcro-rad-demo[fulcrologic/fulcro-rad-demo] that can be
+used when developing features.
 
-In general you will clone both this repository and the `fulcro-rad` one as well.
-
-You will need Datomic using a PostgreSQL backend to run the example. Follow the instructions for setting that up, and then
+You will need Datomic Pro with a PostgreSQL or MySQL backend or Datomic Free to run the example. Follow the instructions for setting that up, and then
 edit the `defaults.edn` file in `src/example/config` and update the database parameters to match your system.
 
-Once you have Datomic running you'll need to start a cljs build.
+```
+ :com.fulcrologic.rad.database-adapters.datomic/databases
+    {:main {:datomic/schema           :production
+            :datomic/driver           :postgresql ;; OR :mysql :free :mem
+            :datomic/database         "example"
+            :datomic/prevent-changes? true
+            :postgresql/host          "localhost"
+            :postgresql/port          5432
+            :postgresql/user          "datomic"
+            :postgresql/password      "datomic"
+            :postgresql/database      "datomic"
+            :free/host                "localhost"
+            :free/port                4334}}
+```
 
-[source,bash]
-------
-$ shadow-cljs server
-------
-
-Then go to dashboard URL and start the `example` CLJS build at http://localhost:9630. Then, you'll start a REPL
-for working on the CLJ stuff:
-
-[source,bash]
-------
-$ clj -A:dev
-user=> (require 'development)
-user=> (in-ns 'development)
-development=> (go)
-------
-
-will start a server and should make the demo accessible at http://localhost:3000/index.html. The `(restart)` function
-will stop the server, refresh server source, and restart it.
 
