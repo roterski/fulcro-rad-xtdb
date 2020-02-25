@@ -180,7 +180,7 @@
     (doseq [schema schemas
             :let [connection (-> env ::connections (get schema))
                   form-delta (sp/transform (sp/walker tempid/tempid?) fulcro-tempid->real-id save-params)
-                  txn        (delta->datomic-txn schema (::form/delta form-delta))]]
+                  txn        (delta->datomic-txn env schema (::form/delta form-delta))]]
       (log/debug "Saving form delta" (with-out-str (pprint form-delta)))
       (log/debug "on schema" schema)
       (log/debug "Running txn\n" (with-out-str (pprint txn)))
