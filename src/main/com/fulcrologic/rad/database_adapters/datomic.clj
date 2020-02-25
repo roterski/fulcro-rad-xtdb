@@ -638,22 +638,22 @@
 (defn wrap-datomic-save
   "Form save middleware to accomplish Datomic saves."
   ([]
-   (fn [{::form/keys [pathom-env params]}]
+   (fn [{::form/keys [params] :as pathom-env}]
      (let [save-result (save-form! pathom-env params)]
        save-result)))
   ([handler]
-   (fn [{::form/keys [pathom-env params] :as save-env}]
+   (fn [{::form/keys [params] :as pathom-env}]
      (let [save-result    (save-form! pathom-env params)
-           handler-result (handler save-env)]
+           handler-result (handler pathom-env)]
        (deep-merge save-result handler-result)))))
 
 (defn wrap-datomic-delete
   "Form delete middleware to accomplish datomic deletes."
   ([handler]
-   (fn [{::form/keys [pathom-env params]}]
+   (fn [{::form/keys [params] :as pathom-env}]
      (let [local-result   (delete-entity! pathom-env params)
            handler-result (handler pathom-env)]
        (deep-merge handler-result local-result))))
   ([]
-   (fn [{::form/keys [pathom-env params]}]
+   (fn [{::form/keys [params] :as pathom-env}]
      (delete-entity! pathom-env params))))
