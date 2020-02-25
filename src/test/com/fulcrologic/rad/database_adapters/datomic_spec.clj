@@ -16,11 +16,7 @@
 
 (defn with-registry [tests]
   (datomic/reset-migrated-dbs!)
-  (attr/clear-registry!)
-  (attr/register-attributes! person/attributes)
-  (attr/register-attributes! address/attributes)
-  (tests)
-  (attr/clear-registry!))
+  (tests))
 
 (use-fixtures :once with-registry)
 
@@ -33,7 +29,11 @@
                                                ::person/addresses {:after [[::address/id taid]]}}
                           [::address/id taid] {::address/id     {:after taid}
                                                ::address/street "111 Main St"}}
-        env              {::datomic/connections {:production conn}}
+        env              {::attr/key->attribute (into {}
+                                                  (map (fn [{::attr/keys [qualified-key] :as attr}]
+                                                         [qualified-key attr]))
+                                                  all-attributes)
+                          ::datomic/connections {:production conn}}
         result           (datomic/save-form! env {::form/delta new-entity-delta})]
     (assertions
       "Returns proper tempid remapping for person"
