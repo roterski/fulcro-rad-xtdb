@@ -89,15 +89,15 @@
 (defn delta->datomic-txn
   "Takes in a normalized form delta, usually from client, and turns in
   into a Datomic transaction for the given schema (returns empty txn if there is nothing on the delta for that schema)."
-  [schema delta]
+  [{::attr/keys [key->attribute]} schema delta]
   (vec
     (mapcat (fn [[[id-k id] entity-diff]]
-              (let [id-attribute (attr/key->attribute id-k)]
+              (let [id-attribute (key->attribute id-k)]
                 (when (-> id-attribute ::schema (= schema))
                   (conj
                     (mapcat (fn [[k diff]]
                               (let [{:keys [before after]} diff
-                                    {::attr/keys [internal? cardinality type] :as attribute} (attr/key->attribute k)]
+                                    {::attr/keys [internal? cardinality type] :as attribute} (key->attribute k)]
                                 (when-not attribute
                                   (log/error "MISSING ATTRIBUTE IN ATTRIBUTE REGISTRY!" k))
                                 (cond
@@ -162,10 +162,10 @@
                      (vals delta))]
       all-keys)))
 
-(defn schemas-for-delta [delta]
+(defn schemas-for-delta [{::attr/keys [key->attribute]} delta]
   (let [all-keys (keys-in-delta delta)
         schemas  (into #{}
-                   (keep #(-> % attr/key->attribute ::schema))
+                   (keep #(-> % key->attribute ::schema))
                    all-keys)]
     schemas))
 
@@ -175,12 +175,12 @@
   (let [tempids (set (sp/select (sp/walker tempid/tempid?) save-params))
         fulcro-tempid->real-id
                 (into {} (map (fn [t] [t (d/squuid)]) tempids))
-        schemas (schemas-for-delta (::form/delta save-params))]
+        schemas (schemas-for-delta env (::form/delta save-params))]
     (log/debug "Saving form across " schemas)
     (doseq [schema schemas
             :let [connection (-> env ::connections (get schema))
                   form-delta (sp/transform (sp/walker tempid/tempid?) fulcro-tempid->real-id save-params)
-                  txn        (delta->datomic-txn schema (::form/delta form-delta))]]
+                  txn        (delta->datomic-txn env schema (::form/delta form-delta))]]
       (log/debug "Saving form delta" (with-out-str (pprint form-delta)))
       (log/debug "on schema" schema)
       (log/debug "Running txn\n" (with-out-str (pprint txn)))
@@ -194,8 +194,8 @@
 
 (defn delete-entity!
   "Delete the given entity, if possible."
-  [env [pk id :as ident]]
-  (enc/if-let [{::keys [schema]} (attr/key->attribute pk)
+  [{::attr/keys [key->attribute] :as env} [pk id :as ident]]
+  (enc/if-let [{::keys [schema]} (key->attribute pk)
                connection (-> env ::connections (get schema))
                txn        [[:db/retractEntity ident]]]
     (do
@@ -245,7 +245,8 @@
 
 (defn- attribute-schema [attributes]
   (mapv
-    (fn [{::attr/keys [unique? identity? type qualified-key cardinality] :as a}]
+    (fn [{::attr/keys [identity? type qualified-key cardinality]
+          ::keys      [attribute-schema] :as a}]
       (let [overrides    (select-keys-in-ns a "db")
             datomic-type (get type-map type)]
         (when-not datomic-type
@@ -257,7 +258,7 @@
                                      :db.cardinality/one)
                    :db/index       true
                    :db/valueType   datomic-type}
-            unique? (assoc :db/unique :db.unique/value)
+            (map? attribute-schema) (merge attribute-schema)
             identity? (assoc :db/unique :db.unique/identity))
           overrides)))
     attributes))
@@ -510,30 +511,30 @@
         nil))))
 
 (>defn id-resolver
-  [id-key attributes]
-  [qualified-keyword? ::attr/attributes => ::pc/resolver]
-  (log/info "Building ID resolver for" id-key)
-  (enc/if-let [outputs   (attr/attributes->eql attributes)
-               attribute (attr/key->attribute id-key)
-               schema    (::schema attribute)]
+  "Generates a resolver from `id-attribute` to the `output-attributes`."
+  [{::attr/keys [qualified-key]
+    ::keys      [schema] :as id-attribute} output-attributes]
+  [::attr/attribute ::attr/attributes => ::pc/resolver]
+  (log/info "Building ID resolver for" qualified-key)
+  (enc/if-let [outputs (attr/attributes->eql output-attributes)]
     {::pc/sym     (symbol
-                    (str (namespace id-key))
-                    (str (name id-key) "-resolver"))
+                    (str (namespace qualified-key))
+                    (str (name qualified-key) "-resolver"))
      ::pc/output  outputs
      ::pc/batch?  true
      ::pc/resolve (fn [env input] (->>
                                     (entity-query
                                       (assoc env
                                         ::schema schema
-                                        ::attr/attributes attributes
-                                        ::attr/qualified-key id-key
+                                        ::attr/attributes output-attributes
+                                        ::attr/qualified-key qualified-key
                                         ::default-query outputs)
                                       input)
                                     (auth/redact env)))
-     ::pc/input   #{id-key}}
+     ::pc/input   #{qualified-key}}
     (do
       (log/error "Unable to generate id-resolver. "
-        "Attribute was missing schema, or could not be found in the attribute registry: " id-key)
+        "Attribute was missing schema, or could not be found in the attribute registry: " qualified-key)
       nil)))
 
 (defn generate-resolvers
@@ -541,13 +542,16 @@
   to your Pathom parser to register resolvers for each of your schemas."
   [attributes schema]
   (let [attributes            (filter #(= schema (::schema %)) attributes)
+        key->attribute        (into {}
+                                (map (fn [{::attr/keys [qualified-key] :as attr}] [qualified-key attr]))
+                                attributes)
         entity-id->attributes (group-by ::k (mapcat (fn [attribute]
                                                       (map
                                                         (fn [id-key] (assoc attribute ::k id-key))
                                                         (get attribute ::entity-ids)))
                                               attributes))
         entity-resolvers      (reduce-kv
-                                (fn [result k v] (conj result (id-resolver k v)))
+                                (fn [result k v] (conj result (id-resolver (key->attribute k) v)))
                                 []
                                 entity-id->attributes)]
     entity-resolvers))
@@ -637,22 +641,22 @@
 (defn wrap-datomic-save
   "Form save middleware to accomplish Datomic saves."
   ([]
-   (fn [{::form/keys [pathom-env params]}]
+   (fn [{::form/keys [params] :as pathom-env}]
      (let [save-result (save-form! pathom-env params)]
        save-result)))
   ([handler]
-   (fn [{::form/keys [pathom-env params] :as save-env}]
+   (fn [{::form/keys [params] :as pathom-env}]
      (let [save-result    (save-form! pathom-env params)
-           handler-result (handler save-env)]
+           handler-result (handler pathom-env)]
        (deep-merge save-result handler-result)))))
 
 (defn wrap-datomic-delete
   "Form delete middleware to accomplish datomic deletes."
   ([handler]
-   (fn [{::form/keys [pathom-env params]}]
+   (fn [{::form/keys [params] :as pathom-env}]
      (let [local-result   (delete-entity! pathom-env params)
            handler-result (handler pathom-env)]
        (deep-merge handler-result local-result))))
   ([]
-   (fn [{::form/keys [pathom-env params]}]
+   (fn [{::form/keys [params] :as pathom-env}]
      (delete-entity! pathom-env params))))
