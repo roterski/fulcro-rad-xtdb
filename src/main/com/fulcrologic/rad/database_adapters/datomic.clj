@@ -513,25 +513,31 @@
 (>defn id-resolver
   "Generates a resolver from `id-attribute` to the `output-attributes`."
   [{::attr/keys [qualified-key]
-    ::keys      [schema] :as id-attribute} output-attributes]
+    ::keys      [schema wrap-resolve] :as id-attribute} output-attributes]
   [::attr/attribute ::attr/attributes => ::pc/resolver]
   (log/info "Building ID resolver for" qualified-key)
   (enc/if-let [outputs (attr/attributes->eql output-attributes)]
-    {::pc/sym     (symbol
-                    (str (namespace qualified-key))
-                    (str (name qualified-key) "-resolver"))
-     ::pc/output  outputs
-     ::pc/batch?  true
-     ::pc/resolve (fn [env input] (->>
-                                    (entity-query
-                                      (assoc env
-                                        ::schema schema
-                                        ::attr/attributes output-attributes
-                                        ::attr/qualified-key qualified-key
-                                        ::default-query outputs)
-                                      input)
-                                    (auth/redact env)))
-     ::pc/input   #{qualified-key}}
+    (let [resolve-sym      (symbol
+                             (str (namespace qualified-key))
+                             (str (name qualified-key) "-resolver"))
+          with-resolve-sym (fn [r]
+                             (fn [env input]
+                               (r (assoc env ::pc/sym resolve-sym) input)))]
+      {::pc/sym     resolve-sym
+       ::pc/output  outputs
+       ::pc/batch?  true
+       ::pc/resolve (cond-> (fn [env input]
+                              (->> (entity-query
+                                     (assoc env
+                                       ::schema schema
+                                       ::attr/attributes output-attributes
+                                       ::attr/qualified-key qualified-key
+                                       ::default-query outputs)
+                                     input)
+                                (auth/redact env)))
+                      wrap-resolve (wrap-resolve)
+                      :always (with-resolve-sym))
+       ::pc/input   #{qualified-key}})
     (do
       (log/error "Unable to generate id-resolver. "
         "Attribute was missing schema, or could not be found in the attribute registry: " qualified-key)
