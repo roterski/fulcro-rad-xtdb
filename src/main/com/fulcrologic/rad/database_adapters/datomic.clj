@@ -101,7 +101,10 @@
                                 (when-not attribute
                                   (log/error "MISSING ATTRIBUTE IN ATTRIBUTE REGISTRY!" k))
                                 (cond
+                                  (not= schema (::schema attribute)) []
+
                                   internal? []
+
                                   (and (= :enum type) (= :many cardinality))
                                   (let [ident [id-k id]]
                                     [[:com.fulcrologic.rad.fn/set-to-many-enumeration ident k (set after)]])
