@@ -28,10 +28,11 @@
   (tests))
 
 (defn with-env [tests]
-  (binding [*conn* (datomic/empty-db-connection all-attributes :production)
-            *env*  {::attr/key->attribute key->attribute
-                    ::datomic/connections {:production *conn*}}]
-    (tests)))
+  (let [conn (datomic/empty-db-connection all-attributes :production)]
+    (binding [*conn* conn
+              *env*  {::attr/key->attribute key->attribute
+                      ::datomic/connections {:production conn}}]
+      (tests))))
 
 (use-fixtures :once with-reset-database)
 (use-fixtures :each with-env)
@@ -339,3 +340,26 @@
                          [:db/retract id :com.fulcrologic.rad.test-schema.person/addresses [::address/id (ids/new-uuid 1)]]
                          [:db/add sid1 ::address/street "B St"]}
           (runnable? txn) => true)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Save Form Integration
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(specification "save-form!" :focus
+  (let [_       @(d/transact *conn* [{::address/id (ids/new-uuid 1) ::address/street "A St"}])
+        tempid1 (tempid/tempid (ids/new-uuid 100))
+        delta   {[::person/id tempid1]           {::person/id              tempid1
+                                                  ::person/full-name       {:after "Bob"}
+                                                  ::person/primary-address {:after [::address/id (ids/new-uuid 1)]}
+                                                  ::person/role            :com.fulcrologic.rad.test-schema.person.role/admin}
+                 [::address/id (ids/new-uuid 1)] {::address/street {:before "A St" :after "A1 St"}}}]
+    (let [{:keys [tempids]} (datomic/save-form! *env* {::form/delta delta})
+          real-id (get tempids tempid1)
+          person  (d/pull (d/db *conn*) '[::person/full-name {::person/primary-address [::address/street]}] real-id)]
+      (assertions
+        "Gives a proper remapping"
+        (pos-int? (get tempids tempid1)) => true
+        "Updates the db"
+        person => {::person/full-name       "Bob"
+                   ::person/primary-address {::address/street "A1 St"}}))))

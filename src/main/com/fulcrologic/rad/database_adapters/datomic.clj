@@ -163,7 +163,6 @@
       delta)))
 
 (defn to-many-txn [env schema delta]
-  (log/spy :info delta)
   (vec
     (mapcat
       (fn [[ident entity-delta]]
@@ -203,23 +202,30 @@
 (defn save-form!
   "Do all of the possible Datomic operations for the given form delta (save to all Datomic databases involved)"
   [env {::form/keys [delta] :as save-params}]
-  #_(let [tempid->intermediate-id (tempid->intermediate-id env delta)
-        form-delta              (sp/transform (sp/walker tempid/tempid?) tempid->intermediate-id delta)
-        schemas                 (schemas-for-delta env (::form/delta save-params))]
+  (let [schemas (schemas-for-delta env delta)
+        result  (atom {:tempids {}})]
     (log/debug "Saving form across " schemas)
     (doseq [schema schemas
             :let [connection (-> env ::connections (get schema))
-                  txn        (delta->datomic-txn env schema form-delta)]]
-      (log/debug "Saving form delta" (with-out-str (pprint form-delta)))
+                  {:keys [tempid->string txn]} (delta->txn env schema delta)]]
+      (log/debug "Saving form delta" (with-out-str (pprint delta)))
       (log/debug "on schema" schema)
       (log/debug "Running txn\n" (with-out-str (pprint txn)))
       (if (and connection (seq txn))
-        (let [database-atom (get-in env [::databases schema])]
-          @(d/transact connection txn)
-          (when database-atom
-            (reset! database-atom (d/db connection))))
+        (try
+          (let [database-atom   (get-in env [::databases schema])
+                {:keys [tempids]} @(d/transact connection txn)
+                tempid->real-id (into {}
+                                  (map (fn [tempid] [tempid (get tempids (tempid->string tempid))]))
+                                  (keys tempid->string))]
+            (when database-atom
+              (reset! database-atom (d/db connection)))
+            (swap! result update :tempids merge tempid->real-id))
+          (catch Exception e
+            (log/error e "Transaction failed!")
+            {}))
         (log/error "Unable to save form. Either connection was missing in env, or txn was empty.")))
-    {:tempids tempid->intermediate-id}))
+    @result))
 
 (defn delete-entity!
   "Delete the given entity, if possible."
