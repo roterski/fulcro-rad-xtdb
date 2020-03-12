@@ -1,8 +1,19 @@
 = Datomic Database Plugin
 
+image:https://img.shields.io/clojars/v/com.fulcrologic/fulcro-rad-datomic.svg[link=https://clojars.org/com.fulcrologic/fulcro-rad-datomic]
+
+Current SNAPSHOT CI status:
+image:https://circleci.com/gh/fulcrologic/fulcro-rad-datomic/tree/develop.svg?style=svg["CircleCI", link="https://circleci.com/gh/fulcrologic/fulcro-rad-datomic/tree/develop"]
+
+Current RELEASE CI status:
+image:https://circleci.com/gh/fulcrologic/fulcro-rad-datomic/tree/master.svg?style=svg["CircleCI", link="https://circleci.com/gh/fulcrologic/fulcro-rad-datomic/tree/master"]
+
 This is a plugin for Fulcro RAD that adds support for using Datomic databases as the back-end technology.
 
 NOTE: The current version supports on-prem Datomic Pro (PostgreSQL or MySQL backends), Datomic Free, or Mem stores.
+
+WARNING: This README may be out of date. See the fulcro-rad-demo project for an up-to-date usage of this
+library. The docs will be more reliably updated after alpha releases.
 
 == Conventions
 
@@ -43,6 +54,7 @@ The plugin-specific attribute parameters are:
 
 `::datomic/schema keyword`:: (required) A name that groups together attributes that go together in a schema
 on a database. A schema can be used on any number of databased (e.g. for sharding).
+`::datomic/native-id?`:: If true it will map the given ID attribute (which must be type long) to `:db/id`.
 `::datomic/entity-ids #{k k2 ...}`:: Required on *non*-identity attributes.
 A set of attribute keys that are `:attr/identity? true`. This
 set indicates that the attribute can be *placed* on an entity that is identified by one of those identity attributes.
