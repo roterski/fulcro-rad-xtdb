@@ -64,96 +64,20 @@
   sequential or not.
 
   Optionally takes in a transform-fn, applies to individual result(s)."
-  ([db pattern ident-keywords eid-or-eids]
+  ([db pattern db-idents eid-or-eids]
    (->> (if (and (not (eql/ident? eid-or-eids)) (sequential? eid-or-eids))
           (d/pull-many db pattern eid-or-eids)
           (d/pull db pattern eid-or-eids))
-     (replace-ref-types db ident-keywords)))
+     (replace-ref-types db db-idents)))
   ([db pattern ident-keywords eid-or-eids transform-fn]
    (let [result (pull-* db pattern ident-keywords eid-or-eids)]
      (if (sequential? result)
        (mapv transform-fn result)
        (transform-fn result)))))
 
-(defn get-by-ids [db pk ids ident-keywords desired-output]
-  ;; TODO: Should use consistent DB for atomicity
-  (let [eids (mapv (fn [id] [pk id]) ids)]
-    (pull-* db desired-output ident-keywords eids)))
-
-(defn ref->ident
-  "Sometimes references on the client are actual idents and sometimes they are
-  nested maps, this function attempts to return an ident regardless."
-  [x]
-  (when (eql/ident? x) x))
-
-(defn delta->datomic-txn
-  "Takes in a normalized form delta, usually from client, and turns in
-  into a Datomic transaction for the given schema (returns empty txn if there is nothing on the delta for that schema)."
-  [{::attr/keys [key->attribute]} schema delta]
-  (vec
-    (mapcat (fn [[[id-k id] entity-diff]]
-              (let [id-attribute (key->attribute id-k)]
-                (when (-> id-attribute ::schema (= schema))
-                  (conj
-                    (mapcat (fn [[k diff]]
-                              (let [{:keys [before after]} diff
-                                    {::attr/keys [internal? cardinality type] :as attribute} (key->attribute k)]
-                                (when-not attribute
-                                  (log/error "MISSING ATTRIBUTE IN ATTRIBUTE REGISTRY!" k))
-                                (cond
-                                  (not= schema (::schema attribute)) []
-
-                                  internal? []
-
-                                  (and (= :enum type) (= :many cardinality))
-                                  (let [ident [id-k id]]
-                                    [[:com.fulcrologic.rad.fn/set-to-many-enumeration ident k (set after)]])
-
-                                  (ref->ident after) (if (nil? after)
-                                                       [[:db/retract (str id) k (ref->ident before)]]
-                                                       [[:com.fulcrologic.rad.fn/add-ident (str id) k (ref->ident after)]])
-
-                                  (and (sequential? after) (every? ref->ident after))
-                                  (let [before   (into #{}
-                                                   (comp (map ref->ident) (remove nil?))
-                                                   before)
-                                        after    (into #{}
-                                                   (comp (map ref->ident) (remove nil?))
-                                                   after)
-                                        retracts (set/difference before after)
-                                        adds     (set/difference after before)
-                                        eid      (str id)]
-                                    (vec
-                                      (concat
-                                        (for [r retracts] [:db/retract eid k r])
-                                        (for [a adds] [:com.fulcrologic.rad.fn/add-ident eid k a]))))
-
-                                  (and (sequential? after) (every? keyword? after))
-                                  (let [before   (into #{}
-                                                   (comp (remove nil?))
-                                                   before)
-                                        after    (into #{}
-                                                   (comp (remove nil?))
-                                                   after)
-                                        retracts (set/difference before after)
-                                        adds     (set/difference after before)
-                                        eid      (str id)]
-                                    (vec
-                                      (concat
-                                        (for [r retracts] [:db/retract eid k r])
-                                        (for [a adds] [:db/add eid k a]))))
-
-                                  ;; Assume field is optional and omit
-                                  (and (nil? before) (nil? after)) []
-
-                                  :else (if (nil? after)
-                                          (if (ref->ident before)
-                                            [[:db/retract (str id) k (ref->ident before)]]
-                                            [[:db/retract (str id) k before]])
-                                          [[:db/add (str id) k after]]))))
-                      entity-diff)
-                    {id-k id :db/id (str id)}))))
-      delta)))
+(defn get-by-ids
+  [db ids db-idents desired-output]
+  (pull-* db desired-output db-idents ids))
 
 (def keys-in-delta
   (fn keys-in-delta [delta]
@@ -172,18 +96,120 @@
                    all-keys)]
     schemas))
 
+(defn tempid->intermediate-id [{::attr/keys [key->attribute]} delta]
+  (let [tempids (set (sp/select (sp/walker tempid/tempid?) delta))
+        fulcro-tempid->real-id
+                (into {} (map (fn [t] [t (str (:id t))]) tempids))]
+    fulcro-tempid->real-id))
+
+(defn native-ident?
+  "Returns true if the given ident is using a database native ID (:db/id)"
+  [{::attr/keys [key->attribute] :as env} ident]
+  (boolean (some-> ident first key->attribute ::native-id?)))
+
+(defn uuid-ident?
+  "Returns true if the ID in the given ident uses UUIDs for ids."
+  [{::attr/keys [key->attribute] :as env} ident]
+  (= :uuid (some-> ident first key->attribute ::attr/type)))
+
+(defn next-uuid [] (d/squuid))
+
+(defn failsafe-id
+  "Returns a fail-safe id for the given ident in a transaction. A fail-safe ID will be one of the following:
+
+  - A long (:db/id) for a pre-existing entity.
+  - A string that stands for a temporary :db/id within the transaction if the id of the ident is temporary.
+  - A lookup ref (the ident itself) if the ID uses a non-native ID, and it is not a tempid.
+  - A keyword if it is a keyword (a :db/ident)
+  "
+  [{::attr/keys [key->attribute] :as env} ident]
+  (if (keyword? ident)
+    ident
+    (let [[_ id] ident]
+      (cond
+        (tempid/tempid? id) (str (:id id))
+        (and (native-ident? env ident) (pos-int? id)) id
+        :otherwise ident))))
+
+(defn to-one? [{::attr/keys [key->attribute]} k]
+  (not (boolean (some-> k key->attribute (attr/to-many?)))))
+
+(defn ref? [{::attr/keys [key->attribute]} k]
+  (= :ref (some-> k key->attribute ::attr/type)))
+
+(defn schema-value? [{::attr/keys [key->attribute]} target-schema k]
+  (let [{::keys      [schema]
+         ::attr/keys [identity?]} (key->attribute k)]
+    (and (= schema target-schema) (not identity?))))
+
+(defn tx-value
+  "Convert `v` to a transaction-safe value based on its type and cardinality."
+  [env k v] (if (ref? env k) (failsafe-id env v) v))
+
+(defn to-one-txn [env schema delta]
+  (vec
+    (mapcat
+      (fn [[ident entity-delta]]
+        (reduce
+          (fn [tx [k {:keys [before after]}]]
+            (if (and (schema-value? env schema k) (to-one? env k))
+              (cond
+                after (conj tx [:db/add (failsafe-id env ident) k (tx-value env k after)])
+                before (conj tx [:db/retract (failsafe-id env ident) k (tx-value env k before)])
+                :else tx)
+              tx))
+          []
+          entity-delta))
+      delta)))
+
+(defn to-many-txn [env schema delta]
+  (log/spy :info delta)
+  (vec
+    (mapcat
+      (fn [[ident entity-delta]]
+        (reduce
+          (fn [tx [k {:keys [before after]}]]
+            (if (and (schema-value? env schema k) (not (to-one? env k)))
+              (let [before  (into #{} (map (fn [v] (tx-value env k v))) before)
+                    after   (into #{} (map (fn [v] (tx-value env k v))) after)
+                    adds    (map
+                              (fn [v] [:db/add (failsafe-id env ident) k v])
+                              (set/difference after before))
+                    removes (map
+                              (fn [v] [:db/retract (failsafe-id env ident) k v])
+                              (set/difference before after))]
+                (into tx (concat adds removes)))
+              tx))
+          []
+          entity-delta))
+      delta)))
+
+(>defn delta->txn
+  [env schema delta]
+  [map? keyword? map? => map?]
+  (let [tempid->txid                 (tempid->intermediate-id env delta)
+        non-native-id-attributes-txn (keep
+                                       (fn [[k id :as ident]]
+                                         (when (and (tempid/tempid? id) (uuid-ident? env ident))
+                                           [:db/add (tempid->txid id) k (next-uuid)]))
+                                       (keys delta))]
+    {:tempid->string tempid->txid
+     :txn            (into []
+                       (concat
+                         non-native-id-attributes-txn
+                         (to-one-txn env schema delta)
+                         (to-many-txn env schema delta)))}))
+
 (defn save-form!
   "Do all of the possible Datomic operations for the given form delta (save to all Datomic databases involved)"
-  [env save-params]
-  (let [tempids (set (sp/select (sp/walker tempid/tempid?) save-params))
-        fulcro-tempid->real-id
-                (into {} (map (fn [t] [t (d/squuid)]) tempids))
-        schemas (schemas-for-delta env (::form/delta save-params))]
+  [env {::form/keys [delta] :as save-params}]
+  #_(let [tempid->intermediate-id (tempid->intermediate-id env delta)
+        form-delta              (sp/transform (sp/walker tempid/tempid?) tempid->intermediate-id delta)
+        schemas                 (schemas-for-delta env (::form/delta save-params))]
     (log/debug "Saving form across " schemas)
     (doseq [schema schemas
             :let [connection (-> env ::connections (get schema))
-                  form-delta (sp/transform (sp/walker tempid/tempid?) fulcro-tempid->real-id save-params)
-                  txn        (delta->datomic-txn env schema (::form/delta form-delta))]]
+                  txn        (delta->datomic-txn env schema form-delta)]]
       (log/debug "Saving form delta" (with-out-str (pprint form-delta)))
       (log/debug "on schema" schema)
       (log/debug "Running txn\n" (with-out-str (pprint txn)))
@@ -193,7 +219,7 @@
           (when database-atom
             (reset! database-atom (d/db connection))))
         (log/error "Unable to save form. Either connection was missing in env, or txn was empty.")))
-    {:tempids fulcro-tempid->real-id}))
+    {:tempids tempid->intermediate-id}))
 
 (defn delete-entity!
   "Delete the given entity, if possible."
@@ -490,22 +516,27 @@
      (::databases config))))
 
 (defn entity-query
-  [{::keys      [schema]
-    ::attr/keys [qualified-key attributes]
+  [{::keys      [schema id-attribute]
+    ::attr/keys [attributes]
     :as         env} input]
-  (let [one? (not (sequential? input))]
-    (enc/if-let [db             (some-> (get-in env [::databases schema]) deref)
-                 query          (get env ::default-query)
-                 ids            (if one?
-                                  [(get input qualified-key)]
-                                  (into [] (keep #(get % qualified-key) input)))
-                 ident-keywords (into #{}
-                                  (keep #(when (= :enum (::attr/type %))
-                                           (::attr/qualified-key %)))
-                                  attributes)]
+  (let [{::attr/keys [qualified-key]
+         ::keys      [native-id?]} id-attribute
+        one? (not (sequential? input))]
+    (enc/if-let [db           (some-> (get-in env [::databases schema]) deref)
+                 query        (get env ::default-query)
+                 ids          (if one?
+                                [(get input qualified-key)]
+                                (into [] (keep #(get % qualified-key) input)))
+                 ids          (if native-id?
+                                ids
+                                (mapv (fn [id] [qualified-key id]) ids))
+                 enumerations (into #{}
+                                (keep #(when (= :enum (::attr/type %))
+                                         (::attr/qualified-key %)))
+                                attributes)]
       (do
         (log/info "Running" query "on entities with " qualified-key ":" ids)
-        (let [result (get-by-ids db qualified-key ids ident-keywords query)]
+        (let [result (get-by-ids db ids enumerations query)]
           (if one?
             (first result)
             result)))
@@ -534,7 +565,7 @@
                                      (assoc env
                                        ::schema schema
                                        ::attr/attributes output-attributes
-                                       ::attr/qualified-key qualified-key
+                                       ::id-attribute id-attribute
                                        ::default-query outputs)
                                      input)
                                 (auth/redact env)))
@@ -596,7 +627,7 @@
      (locking migrated-dbs
        (if-let [db (get @migrated-dbs h)]
          (do
-           (log/info "Returning cached test db")
+           (log/debug "Returning cached test db")
            (dm/mock-conn db))
          (let [base-connection (pristine-db-connection)
                conn            (dm/mock-conn (d/db base-connection))
