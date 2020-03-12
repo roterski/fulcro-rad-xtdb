@@ -65,6 +65,7 @@
 
   Optionally takes in a transform-fn, applies to individual result(s)."
   ([db pattern db-idents eid-or-eids]
+   (log/spy :info pattern)
    (->> (if (and (not (eql/ident? eid-or-eids)) (sequential? eid-or-eids))
           (d/pull-many db pattern eid-or-eids)
           (d/pull db pattern eid-or-eids))
@@ -588,6 +589,8 @@
        ::pc/output  outputs
        ::pc/batch?  true
        ::pc/resolve (cond-> (fn [env input]
+                              ;; TASK: transform native IDs to :db/id, then on output, use query joins to figure out
+                              ;; how to convert them back
                               (->> (entity-query
                                      (assoc env
                                        ::schema schema
