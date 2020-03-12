@@ -4,7 +4,7 @@
   <groupId>com.fulcrologic</groupId>
   <artifactId>fulcro-rad-datomic</artifactId>
   <packaging>jar</packaging>
-  <version>0.0.1-alpha-7</version>
+  <version>0.0.1-alpha-8</version>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
@@ -74,7 +74,7 @@
     <dependency>
       <groupId>com.fulcrologic</groupId>
       <artifactId>fulcro-rad</artifactId>
-      <version>0.0.1-alpha-5</version>
+      <version>0.0.1-alpha-9</version>
     </dependency>
     <dependency>
       <groupId>com.fulcrologic</groupId>
@@ -93,8 +93,8 @@
     </dependency>
     <dependency>
       <groupId>com.datomic</groupId>
-      <artifactId>datomic-pro</artifactId>
-      <version>0.9.5966</version>
+      <artifactId>datomic-free</artifactId>
+      <version>0.9.5697</version>
       <scope>provided</scope>
       <exclusions>
         <exclusion>
@@ -102,12 +102,6 @@
           <artifactId>slf4j-nop</artifactId>
         </exclusion>
       </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>org.postgresql</groupId>
-      <artifactId>postgresql</artifactId>
-      <version>42.2.8</version>
-      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>vvvvalvalval</groupId>
