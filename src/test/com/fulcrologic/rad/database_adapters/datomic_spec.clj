@@ -346,7 +346,7 @@
 ;; Save Form Integration
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(specification "save-form!" :focus
+(specification "save-form!"
   (let [_       @(d/transact *conn* [{::address/id (ids/new-uuid 1) ::address/street "A St"}])
         tempid1 (tempid/tempid (ids/new-uuid 100))
         delta   {[::person/id tempid1]           {::person/id              tempid1
@@ -363,3 +363,20 @@
         "Updates the db"
         person => {::person/full-name       "Bob"
                    ::person/primary-address {::address/street "A1 St"}}))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; TEMPID remapping
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(specification "save-form! tempid remapping"
+  (let [tempid1 (tempid/tempid (ids/new-uuid 100))
+        tempid2 (tempid/tempid (ids/new-uuid 101))
+        delta   {[::person/id tempid1]  {::person/id              tempid1
+                                         ::person/primary-address {:after [::address/id tempid2]}}
+                 [::address/id tempid2] {::address/street {:after "A1 St"}}}]
+    (let [{:keys [tempids]} (datomic/save-form! *env* {::form/delta delta})]
+      (assertions
+        "Returns a native ID remap for entity using native IDs"
+        (pos-int? (get tempids tempid1)) => true
+        "Returns a non-native ID remap for entity using uuid IDs"
+        (uuid? (get tempids tempid2)) => true))))

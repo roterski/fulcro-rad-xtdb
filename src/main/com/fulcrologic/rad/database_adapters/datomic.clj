@@ -183,21 +183,39 @@
           entity-delta))
       delta)))
 
+(defn generate-next-id [{::attr/keys [key->attribute] :as env} k]
+  (let [{::keys      [native-id?]
+         ::attr/keys [type]} (key->attribute k)]
+    (cond
+      native-id? nil
+      (= :uuid type) (next-uuid)
+      :otherwise (throw (ex-info "Cannot generate an ID for non-native ID attribute" {:attribute k})))))
+
+(defn tempids->generate-ids [{::attr/keys [key->attribute] :as env} delta]
+  (let [idents (keys delta)
+        fulcro-tempid->generated-id
+               (into {} (keep (fn [[k id :as ident]]
+                                (when (and (tempid/tempid? id) (not (native-ident? env ident)))
+                                  [id (generate-next-id env k)])) idents))]
+    fulcro-tempid->generated-id))
+
 (>defn delta->txn
   [env schema delta]
   [map? keyword? map? => map?]
   (let [tempid->txid                 (tempid->intermediate-id env delta)
+        tempid->generated-id         (tempids->generate-ids env delta)
         non-native-id-attributes-txn (keep
                                        (fn [[k id :as ident]]
                                          (when (and (tempid/tempid? id) (uuid-ident? env ident))
-                                           [:db/add (tempid->txid id) k (next-uuid)]))
+                                           [:db/add (tempid->txid id) k (tempid->generated-id id)]))
                                        (keys delta))]
-    {:tempid->string tempid->txid
-     :txn            (into []
-                       (concat
-                         non-native-id-attributes-txn
-                         (to-one-txn env schema delta)
-                         (to-many-txn env schema delta)))}))
+    {:tempid->string       tempid->txid
+     :tempid->generated-id tempid->generated-id
+     :txn                  (into []
+                             (concat
+                               non-native-id-attributes-txn
+                               (to-one-txn env schema delta)
+                               (to-many-txn env schema delta)))}))
 
 (defn save-form!
   "Do all of the possible Datomic operations for the given form delta (save to all Datomic databases involved)"
@@ -207,7 +225,9 @@
     (log/debug "Saving form across " schemas)
     (doseq [schema schemas
             :let [connection (-> env ::connections (get schema))
-                  {:keys [tempid->string txn]} (delta->txn env schema delta)]]
+                  {:keys [tempid->string
+                          tempid->generated-id
+                          txn]} (delta->txn env schema delta)]]
       (log/debug "Saving form delta" (with-out-str (pprint delta)))
       (log/debug "on schema" schema)
       (log/debug "Running txn\n" (with-out-str (pprint txn)))
@@ -216,7 +236,8 @@
           (let [database-atom   (get-in env [::databases schema])
                 {:keys [tempids]} @(d/transact connection txn)
                 tempid->real-id (into {}
-                                  (map (fn [tempid] [tempid (get tempids (tempid->string tempid))]))
+                                  (map (fn [tempid] [tempid (get tempid->generated-id tempid
+                                                              (get tempids (tempid->string tempid)))]))
                                   (keys tempid->string))]
             (when database-atom
               (reset! database-atom (d/db connection)))
