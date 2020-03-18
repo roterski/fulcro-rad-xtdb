@@ -65,7 +65,6 @@
 
   Optionally takes in a transform-fn, applies to individual result(s)."
   ([db pattern db-idents eid-or-eids]
-   (log/spy :info pattern)
    (->> (if (and (not (eql/ident? eid-or-eids)) (sequential? eid-or-eids))
           (d/pull-many db pattern eid-or-eids)
           (d/pull db pattern eid-or-eids))
@@ -578,7 +577,8 @@
     ::keys      [schema wrap-resolve] :as id-attribute} output-attributes]
   [::attr/attribute ::attr/attributes => ::pc/resolver]
   (log/info "Building ID resolver for" qualified-key)
-  (enc/if-let [outputs (attr/attributes->eql output-attributes)]
+  (enc/if-let [_       id-attribute
+               outputs (attr/attributes->eql output-attributes)]
     (let [resolve-sym      (symbol
                              (str (namespace qualified-key))
                              (str (name qualified-key) "-resolver"))
@@ -612,16 +612,20 @@
   to your Pathom parser to register resolvers for each of your schemas."
   [attributes schema]
   (let [attributes            (filter #(= schema (::schema %)) attributes)
-        key->attribute        (into {}
-                                (map (fn [{::attr/keys [qualified-key] :as attr}] [qualified-key attr]))
-                                attributes)
+        key->attribute        (attr/attribute-map attributes)
         entity-id->attributes (group-by ::k (mapcat (fn [attribute]
                                                       (map
                                                         (fn [id-key] (assoc attribute ::k id-key))
                                                         (get attribute ::entity-ids)))
                                               attributes))
         entity-resolvers      (reduce-kv
-                                (fn [result k v] (conj result (id-resolver (key->attribute k) v)))
+                                (fn [result k v]
+                                  (enc/if-let [attr     (key->attribute k)
+                                               resolver (id-resolver attr v)]
+                                    (conj result resolver)
+                                    (do
+                                      (log/error "Internal error generating resolver for ID key" k)
+                                      result)))
                                 []
                                 entity-id->attributes)]
     entity-resolvers))
