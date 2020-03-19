@@ -1,6 +1,6 @@
 (ns com.fulcrologic.rad.database-adapters.datomic
   (:require
-    [cljs.spec.alpha :as s]
+    [clojure.spec.alpha :as s]
     [clojure.set :as set]
     [clojure.walk :as walk]
     [clojure.pprint :refer [pprint]]
@@ -34,6 +34,45 @@
    :symbol   :db.type/symbol
    :ref      :db.type/ref
    :uuid     :db.type/uuid})
+
+(>defn pathom-query->datomic-query [all-attributes pathom-query]
+  [::attr/attributes ::eql/query => ::eql/query]
+  (let [native-id? #(and (true? (::native-id? %)) (true? (::attr/identity? %)))
+        native-ids (set (sp/select [sp/ALL native-id? ::attr/qualified-key] all-attributes))]
+    (sp/transform (sp/walker keyword?) (fn [k] (if (contains? native-ids k) :db/id k)) pathom-query)))
+
+(defn- fix-id-keys
+  "Fix the ID keys recursively on result."
+  [k->a ast-nodes result]
+  (let [id?                (fn [{:keys [dispatch-key]}] (some-> dispatch-key k->a ::attr/identity?))
+        id-key             (:key (sp/select-first [sp/ALL id?] ast-nodes))
+        join-key->children (into {}
+                             (comp
+                               (filter #(= :join (:type %)))
+                               (map (fn [{:keys [key children]}] [key children])))
+                             ast-nodes)
+        join-keys          (set (keys join-key->children))
+        join-key?          #(contains? join-keys %)]
+    (reduce-kv
+      (fn [m k v]
+        (cond
+          (= :db/id k) (assoc m id-key v)
+          (and (join-key? k) (vector? v)) (assoc m k (mapv #(fix-id-keys k->a (join-key->children k) %) v))
+          (and (join-key? k) (map? v)) (assoc m k (fix-id-keys k->a (join-key->children k) v))
+          :otherwise (assoc m k v)))
+      {}
+      result)))
+
+(>defn datomic-result->pathom-result
+  "Convert a datomic result containing :db/id into a pathom result containing the proper id keyword that was used
+   in the original query."
+  [k->a pathom-query result]
+  [(s/map-of keyword? ::attr/attribute) ::eql/query (? coll?) => (? coll?)]
+  (when result
+    (let [{:keys [children]} (eql/query->ast pathom-query)]
+      (if (vector? result)
+        (mapv #(fix-id-keys k->a children %) result)
+        (fix-id-keys k->a children result)))))
 
 ;; FIXME: There should be a client API query that runs on startup to find idents so that this is more efficient and also so we don't use the entity API.
 (defn replace-ref-types
@@ -577,8 +616,9 @@
     ::keys      [schema wrap-resolve] :as id-attribute} output-attributes]
   [::attr/attribute ::attr/attributes => ::pc/resolver]
   (log/info "Building ID resolver for" qualified-key)
-  (enc/if-let [_       id-attribute
-               outputs (attr/attributes->eql output-attributes)]
+  (enc/if-let [_          id-attribute
+               outputs    (attr/attributes->eql output-attributes)
+               pull-query (pathom-query->datomic-query (conj output-attributes id-attribute) outputs)]
     (let [resolve-sym      (symbol
                              (str (namespace qualified-key))
                              (str (name qualified-key) "-resolver"))
@@ -588,16 +628,15 @@
       {::pc/sym     resolve-sym
        ::pc/output  outputs
        ::pc/batch?  true
-       ::pc/resolve (cond-> (fn [env input]
-                              ;; TASK: transform native IDs to :db/id, then on output, use query joins to figure out
-                              ;; how to convert them back
-                              (->> (entity-query
-                                     (assoc env
-                                       ::schema schema
-                                       ::attr/attributes output-attributes
-                                       ::id-attribute id-attribute
-                                       ::default-query outputs)
-                                     input)
+       ::pc/resolve (cond-> (fn [{::attr/keys [key->attribute] :as env} input]
+                              (->> (log/spy :info (entity-query
+                                                    (assoc env
+                                                      ::schema schema
+                                                      ::attr/attributes output-attributes
+                                                      ::id-attribute id-attribute
+                                                      ::default-query (log/spy :info pull-query))
+                                                    input))
+                                (datomic-result->pathom-result key->attribute outputs)
                                 (auth/redact env)))
                       wrap-resolve (wrap-resolve)
                       :always (with-resolve-sym))
