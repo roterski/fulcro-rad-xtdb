@@ -17,8 +17,8 @@
                        :main-opts   ["-m" "kaocha.runner"]
                        :extra-deps  {lambdaisland/kaocha {:mvn/version "0.0-590"}}}
 
-           :provided  {com.datomic/datomic-free {:mvn/version "0.9.5697"
-                                                 :exclusions  [org.slf4j/slf4j-nop]}}
+           :provided  {:extra-deps {com.datomic/datomic-free {:mvn/version "0.9.5697"
+                                                 :exclusions  [org.slf4j/slf4j-nop]}}}
 
            :dev       {:extra-paths ["src/dev" "resources"]
                        :extra-deps  {org.clojure/tools.namespace {:mvn/version "0.3.1"}}}}}
