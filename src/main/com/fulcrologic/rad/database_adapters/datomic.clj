@@ -618,6 +618,7 @@
   (log/info "Building ID resolver for" qualified-key)
   (enc/if-let [_          id-attribute
                outputs    (attr/attributes->eql output-attributes)
+               ;; TASK: Needs to be all attributes!
                pull-query (pathom-query->datomic-query (conj output-attributes id-attribute) outputs)]
     (let [resolve-sym      (symbol
                              (str (namespace qualified-key))
