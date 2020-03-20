@@ -615,7 +615,7 @@
   [all-attributes
    {::attr/keys [qualified-key] ::keys [schema wrap-resolve] :as id-attribute}
    output-attributes]
-  [::attr/attribute ::attr/attributes => ::pc/resolver]
+  [::attr/attributes ::attr/attribute ::attr/attributes => ::pc/resolver]
   (log/info "Building ID resolver for" qualified-key)
   (enc/if-let [_          id-attribute
                outputs    (attr/attributes->eql output-attributes)
@@ -626,17 +626,19 @@
           with-resolve-sym (fn [r]
                              (fn [env input]
                                (r (assoc env ::pc/sym resolve-sym) input)))]
+      (log/debug "Computed output is" outputs)
+      (log/debug "Datomic pull query to derive output is" pull-query)
       {::pc/sym     resolve-sym
        ::pc/output  outputs
        ::pc/batch?  true
        ::pc/resolve (cond-> (fn [{::attr/keys [key->attribute] :as env} input]
-                              (->> (log/spy :info (entity-query
-                                                    (assoc env
-                                                      ::schema schema
-                                                      ::attr/attributes output-attributes
-                                                      ::id-attribute id-attribute
-                                                      ::default-query (log/spy :info pull-query))
-                                                    input))
+                              (->> (entity-query
+                                     (assoc env
+                                       ::schema schema
+                                       ::attr/attributes output-attributes
+                                       ::id-attribute id-attribute
+                                       ::default-query pull-query)
+                                     input)
                                 (datomic-result->pathom-result key->attribute outputs)
                                 (auth/redact env)))
                       wrap-resolve (wrap-resolve)
