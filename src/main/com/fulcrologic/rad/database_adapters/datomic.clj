@@ -612,14 +612,14 @@
 
 (>defn id-resolver
   "Generates a resolver from `id-attribute` to the `output-attributes`."
-  [{::attr/keys [qualified-key]
-    ::keys      [schema wrap-resolve] :as id-attribute} output-attributes]
+  [all-attributes
+   {::attr/keys [qualified-key] ::keys [schema wrap-resolve] :as id-attribute}
+   output-attributes]
   [::attr/attribute ::attr/attributes => ::pc/resolver]
   (log/info "Building ID resolver for" qualified-key)
   (enc/if-let [_          id-attribute
                outputs    (attr/attributes->eql output-attributes)
-               ;; TASK: Needs to be all attributes!
-               pull-query (pathom-query->datomic-query (conj output-attributes id-attribute) outputs)]
+               pull-query (pathom-query->datomic-query all-attributes outputs)]
     (let [resolve-sym      (symbol
                              (str (namespace qualified-key))
                              (str (name qualified-key) "-resolver"))
@@ -661,7 +661,7 @@
         entity-resolvers      (reduce-kv
                                 (fn [result k v]
                                   (enc/if-let [attr     (key->attribute k)
-                                               resolver (id-resolver attr v)]
+                                               resolver (id-resolver attributes attr v)]
                                     (conj result resolver)
                                     (do
                                       (log/error "Internal error generating resolver for ID key" k)
