@@ -28,7 +28,6 @@
    ::attr/enumerated-values #{:read :write :execute}
    ::attr/cardinality       :many})
 
-
 (defattr email ::email :string
   {::datomic/schema     :production
    ::datomic/entity-ids #{::id}
@@ -41,6 +40,12 @@
 
 (defattr addresses ::addresses :ref
   {::attr/target        :com.fulcrologic.rad.test-schema.address/id
+   ::attr/cardinality   :many
+   ::datomic/schema     :production
+   ::datomic/entity-ids #{::id}})
+
+(defattr things ::things :ref
+  {::attr/target        :com.fulcrologic.rad.test-schema.thing/id
    ::attr/cardinality   :many
    ::datomic/schema     :production
    ::datomic/entity-ids #{::id}})

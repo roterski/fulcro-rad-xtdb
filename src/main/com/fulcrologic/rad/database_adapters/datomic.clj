@@ -1,6 +1,6 @@
 (ns com.fulcrologic.rad.database-adapters.datomic
   (:require
-    [cljs.spec.alpha :as s]
+    [clojure.spec.alpha :as s]
     [clojure.set :as set]
     [clojure.walk :as walk]
     [clojure.pprint :refer [pprint]]
@@ -34,6 +34,45 @@
    :symbol   :db.type/symbol
    :ref      :db.type/ref
    :uuid     :db.type/uuid})
+
+(>defn pathom-query->datomic-query [all-attributes pathom-query]
+  [::attr/attributes ::eql/query => ::eql/query]
+  (let [native-id? #(and (true? (::native-id? %)) (true? (::attr/identity? %)))
+        native-ids (set (sp/select [sp/ALL native-id? ::attr/qualified-key] all-attributes))]
+    (sp/transform (sp/walker keyword?) (fn [k] (if (contains? native-ids k) :db/id k)) pathom-query)))
+
+(defn- fix-id-keys
+  "Fix the ID keys recursively on result."
+  [k->a ast-nodes result]
+  (let [id?                (fn [{:keys [dispatch-key]}] (some-> dispatch-key k->a ::attr/identity?))
+        id-key             (:key (sp/select-first [sp/ALL id?] ast-nodes))
+        join-key->children (into {}
+                             (comp
+                               (filter #(= :join (:type %)))
+                               (map (fn [{:keys [key children]}] [key children])))
+                             ast-nodes)
+        join-keys          (set (keys join-key->children))
+        join-key?          #(contains? join-keys %)]
+    (reduce-kv
+      (fn [m k v]
+        (cond
+          (= :db/id k) (assoc m id-key v)
+          (and (join-key? k) (vector? v)) (assoc m k (mapv #(fix-id-keys k->a (join-key->children k) %) v))
+          (and (join-key? k) (map? v)) (assoc m k (fix-id-keys k->a (join-key->children k) v))
+          :otherwise (assoc m k v)))
+      {}
+      result)))
+
+(>defn datomic-result->pathom-result
+  "Convert a datomic result containing :db/id into a pathom result containing the proper id keyword that was used
+   in the original query."
+  [k->a pathom-query result]
+  [(s/map-of keyword? ::attr/attribute) ::eql/query (? coll?) => (? coll?)]
+  (when result
+    (let [{:keys [children]} (eql/query->ast pathom-query)]
+      (if (vector? result)
+        (mapv #(fix-id-keys k->a children %) result)
+        (fix-id-keys k->a children result)))))
 
 ;; FIXME: There should be a client API query that runs on startup to find idents so that this is more efficient and also so we don't use the entity API.
 (defn replace-ref-types
@@ -573,28 +612,34 @@
 
 (>defn id-resolver
   "Generates a resolver from `id-attribute` to the `output-attributes`."
-  [{::attr/keys [qualified-key]
-    ::keys      [schema wrap-resolve] :as id-attribute} output-attributes]
-  [::attr/attribute ::attr/attributes => ::pc/resolver]
+  [all-attributes
+   {::attr/keys [qualified-key] ::keys [schema wrap-resolve] :as id-attribute}
+   output-attributes]
+  [::attr/attributes ::attr/attribute ::attr/attributes => ::pc/resolver]
   (log/info "Building ID resolver for" qualified-key)
-  (enc/if-let [outputs (attr/attributes->eql output-attributes)]
+  (enc/if-let [_          id-attribute
+               outputs    (attr/attributes->eql output-attributes)
+               pull-query (pathom-query->datomic-query all-attributes outputs)]
     (let [resolve-sym      (symbol
                              (str (namespace qualified-key))
                              (str (name qualified-key) "-resolver"))
           with-resolve-sym (fn [r]
                              (fn [env input]
                                (r (assoc env ::pc/sym resolve-sym) input)))]
+      (log/debug "Computed output is" outputs)
+      (log/debug "Datomic pull query to derive output is" pull-query)
       {::pc/sym     resolve-sym
        ::pc/output  outputs
        ::pc/batch?  true
-       ::pc/resolve (cond-> (fn [env input]
+       ::pc/resolve (cond-> (fn [{::attr/keys [key->attribute] :as env} input]
                               (->> (entity-query
                                      (assoc env
                                        ::schema schema
                                        ::attr/attributes output-attributes
                                        ::id-attribute id-attribute
-                                       ::default-query outputs)
+                                       ::default-query pull-query)
                                      input)
+                                (datomic-result->pathom-result key->attribute outputs)
                                 (auth/redact env)))
                       wrap-resolve (wrap-resolve)
                       :always (with-resolve-sym))
@@ -609,16 +654,20 @@
   to your Pathom parser to register resolvers for each of your schemas."
   [attributes schema]
   (let [attributes            (filter #(= schema (::schema %)) attributes)
-        key->attribute        (into {}
-                                (map (fn [{::attr/keys [qualified-key] :as attr}] [qualified-key attr]))
-                                attributes)
+        key->attribute        (attr/attribute-map attributes)
         entity-id->attributes (group-by ::k (mapcat (fn [attribute]
                                                       (map
                                                         (fn [id-key] (assoc attribute ::k id-key))
                                                         (get attribute ::entity-ids)))
                                               attributes))
         entity-resolvers      (reduce-kv
-                                (fn [result k v] (conj result (id-resolver (key->attribute k) v)))
+                                (fn [result k v]
+                                  (enc/if-let [attr     (key->attribute k)
+                                               resolver (id-resolver attributes attr v)]
+                                    (conj result resolver)
+                                    (do
+                                      (log/error "Internal error generating resolver for ID key" k)
+                                      result)))
                                 []
                                 entity-id->attributes)]
     entity-resolvers))

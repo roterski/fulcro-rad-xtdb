@@ -10,7 +10,15 @@ image:https://circleci.com/gh/fulcrologic/fulcro-rad-datomic/tree/master.svg?sty
 
 This is a plugin for Fulcro RAD that adds support for using Datomic databases as the back-end technology.
 
-NOTE: The current version supports on-prem Datomic Pro (PostgreSQL or MySQL backends), Datomic Free, or Mem stores.
+NOTE: The current version supports on-prem Datomic Pro (PostgreSQL or MySQL backends), Datomic Free, or Mem stores. Make sure
+you do not accidentally get Datomic Free and Datomic Pro BOTH on the CLASSPATH. If you're using deps you should make
+sure you use something like:
+
+[source, clojure]
+-----
+{:deps {com.fulcrologic/fulcro-rad-datomic {:mvn/version "x.x.x"
+                                            :exclusions  [com.datomic/datomic-free]}}}
+-----
 
 WARNING: This README may be out of date. See the fulcro-rad-demo project for an up-to-date usage of this
 library. The docs will be more reliably updated after alpha releases.
