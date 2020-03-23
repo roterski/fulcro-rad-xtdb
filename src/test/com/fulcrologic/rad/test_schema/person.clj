@@ -9,45 +9,45 @@
 (defattr id ::id :long
   {::attr/identity?     true
    ::datomic/native-id? true
-   ::datomic/schema     :production})
+   ::attr/schema        :production})
 
 (defattr full-name ::full-name :string
-  {::datomic/schema     :production
-   ::datomic/entity-ids #{::id}
-   ::attr/required?     true})
+  {::attr/schema     :production
+   ::attr/identities #{::id}
+   ::attr/required?  true})
 
 (defattr role ::role :enum
-  {::datomic/schema         :production
-   ::datomic/entity-ids     #{::id}
+  {::attr/schema            :production
+   ::attr/identities        #{::id}
    ::attr/enumerated-values #{:user :admin}
    ::attr/cardinality       :one})
 
 (defattr permissions ::permissions :enum
-  {::datomic/schema         :production
-   ::datomic/entity-ids     #{::id}
+  {::attr/schema            :production
+   ::attr/identities        #{::id}
    ::attr/enumerated-values #{:read :write :execute}
    ::attr/cardinality       :many})
 
 (defattr email ::email :string
-  {::datomic/schema     :production
-   ::datomic/entity-ids #{::id}
-   ::attr/required?     true})
+  {::attr/schema     :production
+   ::attr/identities #{::id}
+   ::attr/required?  true})
 
 (defattr primary-address ::primary-address :ref
-  {::attr/target        :com.fulcrologic.rad.test-schema.address/id
-   ::datomic/schema     :production
-   ::datomic/entity-ids #{::id}})
+  {::attr/target     :com.fulcrologic.rad.test-schema.address/id
+   ::attr/schema     :production
+   ::attr/identities #{::id}})
 
 (defattr addresses ::addresses :ref
-  {::attr/target        :com.fulcrologic.rad.test-schema.address/id
-   ::attr/cardinality   :many
-   ::datomic/schema     :production
-   ::datomic/entity-ids #{::id}})
+  {::attr/target      :com.fulcrologic.rad.test-schema.address/id
+   ::attr/cardinality :many
+   ::attr/schema      :production
+   ::attr/identities  #{::id}})
 
 (defattr things ::things :ref
-  {::attr/target        :com.fulcrologic.rad.test-schema.thing/id
-   ::attr/cardinality   :many
-   ::datomic/schema     :production
-   ::datomic/entity-ids #{::id}})
+  {::attr/target      :com.fulcrologic.rad.test-schema.thing/id
+   ::attr/cardinality :many
+   ::attr/schema      :production
+   ::attr/identities  #{::id}})
 
 (def attributes [id full-name email primary-address addresses role permissions])

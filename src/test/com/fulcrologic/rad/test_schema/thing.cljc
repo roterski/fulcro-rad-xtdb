@@ -6,11 +6,11 @@
 (defattr id ::id :long
   {::attr/identity?     true
    ::datomic/native-id? true
-   ::datomic/schema     :production})
+   ::attr/schema        :production})
 
 (defattr label ::label :string
-  {::datomic/schema     :production
-   ::datomic/entity-ids #{::id}
-   ::attr/required?     true})
+  {::attr/schema     :production
+   ::attr/identities #{::id}
+   ::attr/required?  true})
 
 (def attributes [id label])

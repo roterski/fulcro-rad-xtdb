@@ -8,11 +8,11 @@
 
 (defattr id ::id :uuid
   {::attr/identity? true
-   ::datomic/schema :production})
+   ::attr/schema    :production})
 
 (defattr street ::street :string
-  {::datomic/entity-ids #{::id}
-   ::attr/required?     true
-   ::datomic/schema     :production})
+  {::attr/identities #{::id}
+   ::attr/required?  true
+   ::attr/schema     :production})
 
 (def attributes [id street])
