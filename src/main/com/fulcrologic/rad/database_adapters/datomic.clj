@@ -131,7 +131,7 @@
 (defn schemas-for-delta [{::attr/keys [key->attribute]} delta]
   (let [all-keys (keys-in-delta delta)
         schemas  (into #{}
-                   (keep #(-> % key->attribute ::schema))
+                   (keep #(-> % key->attribute ::attr/schema))
                    all-keys)]
     schemas))
 
@@ -177,7 +177,7 @@
   (= :ref (some-> k key->attribute ::attr/type)))
 
 (defn schema-value? [{::attr/keys [key->attribute]} target-schema k]
-  (let [{::keys      [schema]
+  (let [{:keys       [::attr/schema]
          ::attr/keys [identity?]} (key->attribute k)]
     (and (= schema target-schema) (not identity?))))
 
@@ -290,7 +290,7 @@
 (defn delete-entity!
   "Delete the given entity, if possible."
   [{::attr/keys [key->attribute] :as env} [pk id :as ident]]
-  (enc/if-let [{::keys [schema]} (key->attribute pk)
+  (enc/if-let [{:keys [::attr/schema]} (key->attribute pk)
                connection (-> env ::connections (get schema))
                txn        [[:db/retractEntity ident]]]
     (do
@@ -377,7 +377,7 @@
    that have a `::datomic/schema` that matches `schema-name`."
   [attributes schema-name]
   [::attr/attributes keyword? => vector?]
-  (let [attributes (filter #(= schema-name (::schema %)) attributes)]
+  (let [attributes (filter #(= schema-name (::attr/schema %)) attributes)]
     (when (empty? attributes)
       (log/warn "Automatic schema requested, but the attribute list is empty. No schema will be generated!"))
     (let [txn (attribute-schema attributes)
@@ -474,7 +474,7 @@
   [any? keyword? ::attr/attributes => any?]
   (let [die! #(throw (ex-info "Validation Failed" {:schema schema}))]
     (doseq [attr all-attributes
-            :let [{attr-schema      ::schema
+            :let [{attr-schema      ::attr/schema
                    attr-cardinality ::attr/cardinality
                    ::attr/keys      [qualified-key type]} attr]]
       (when (= attr-schema schema)
@@ -582,7 +582,7 @@
      (::databases config))))
 
 (defn entity-query
-  [{::keys      [schema id-attribute]
+  [{:keys       [::attr/schema ::id-attribute]
     ::attr/keys [attributes]
     :as         env} input]
   (let [{::attr/keys [qualified-key]
@@ -613,7 +613,7 @@
 (>defn id-resolver
   "Generates a resolver from `id-attribute` to the `output-attributes`."
   [all-attributes
-   {::attr/keys [qualified-key] ::keys [schema wrap-resolve] :as id-attribute}
+   {::attr/keys [qualified-key] :keys [::attr/schema ::wrap-resolve] :as id-attribute}
    output-attributes]
   [::attr/attributes ::attr/attribute ::attr/attributes => ::pc/resolver]
   (log/info "Building ID resolver for" qualified-key)
@@ -634,7 +634,7 @@
        ::pc/resolve (cond-> (fn [{::attr/keys [key->attribute] :as env} input]
                               (->> (entity-query
                                      (assoc env
-                                       ::schema schema
+                                       ::attr/schema schema
                                        ::attr/attributes output-attributes
                                        ::id-attribute id-attribute
                                        ::default-query pull-query)
@@ -653,12 +653,12 @@
   "Generate all of the resolvers that make sense for the given database config. This should be passed
   to your Pathom parser to register resolvers for each of your schemas."
   [attributes schema]
-  (let [attributes            (filter #(= schema (::schema %)) attributes)
+  (let [attributes            (filter #(= schema (::attr/schema %)) attributes)
         key->attribute        (attr/attribute-map attributes)
         entity-id->attributes (group-by ::k (mapcat (fn [attribute]
                                                       (map
                                                         (fn [id-key] (assoc attribute ::k id-key))
-                                                        (get attribute ::entity-ids)))
+                                                        (get attribute ::attr/identities)))
                                               attributes))
         entity-resolvers      (reduce-kv
                                 (fn [result k v]
