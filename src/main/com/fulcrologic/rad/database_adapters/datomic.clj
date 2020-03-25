@@ -193,8 +193,8 @@
           (fn [tx [k {:keys [before after]}]]
             (if (and (schema-value? env schema k) (to-one? env k))
               (cond
-                after (conj tx [:db/add (failsafe-id env ident) k (tx-value env k after)])
-                before (conj tx [:db/retract (failsafe-id env ident) k (tx-value env k before)])
+                (not (nil? after)) (conj tx [:db/add (failsafe-id env ident) k (tx-value env k after)])
+                (not (nil? before)) (conj tx [:db/retract (failsafe-id env ident) k (tx-value env k before)])
                 :else tx)
               tx))
           []
