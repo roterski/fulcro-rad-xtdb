@@ -193,8 +193,8 @@
           (fn [tx [k {:keys [before after]}]]
             (if (and (schema-value? env schema k) (to-one? env k))
               (cond
-                after (conj tx [:db/add (failsafe-id env ident) k (tx-value env k after)])
-                before (conj tx [:db/retract (failsafe-id env ident) k (tx-value env k before)])
+                (not (nil? after)) (conj tx [:db/add (failsafe-id env ident) k (tx-value env k after)])
+                (not (nil? before)) (conj tx [:db/retract (failsafe-id env ident) k (tx-value env k before)])
                 :else tx)
               tx))
           []
@@ -289,8 +289,11 @@
 
 (defn delete-entity!
   "Delete the given entity, if possible."
-  [{::attr/keys [key->attribute] :as env} [pk id :as ident]]
-  (enc/if-let [{:keys [::attr/schema]} (key->attribute pk)
+  [{::attr/keys [key->attribute] :as env} params]
+  (enc/if-let [pk         (ffirst params)
+               id         (get params pk)
+               ident      [pk id]
+               {:keys [::attr/schema]} (key->attribute pk)
                connection (-> env ::connections (get schema))
                txn        [[:db/retractEntity ident]]]
     (do
@@ -300,7 +303,7 @@
         (when database-atom
           (reset! database-atom (d/db connection)))
         {}))
-    (log/warn "Datomic adapter failed to delete ident " ident)))
+    (log/warn "Datomic adapter failed to delete " params)))
 
 (def suggested-logging-blacklist
   "A vector containing a list of namespace strings that generate a lot of debug noise when using Datomic. Can

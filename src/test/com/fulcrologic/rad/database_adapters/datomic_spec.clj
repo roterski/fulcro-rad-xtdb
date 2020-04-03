@@ -104,7 +104,29 @@
         (empty? tempid->string) => true
         "Includes lookup refs for the non-native ID, and changes for the facts that changed"
         txn => [[:db/add [::address/id id] ::address/street "111 Main St"]]
-        (runnable? txn) => true))))
+        (runnable? txn) => true)))
+  (let [id    (ids/new-uuid 1)
+        delta {[::address/id id] {::address/id       {:before id :after id}
+                                  ::address/enabled? {:before nil :after false}}}]
+    (let [{:keys [txn]} (datomic/delta->txn *env* :production delta)]
+      (assertions
+        "setting boolean false does an add"
+        txn => [[:db/add
+                 [:com.fulcrologic.rad.test-schema.address/id
+                  #uuid "ffffffff-ffff-ffff-ffff-000000000001"]
+                 :com.fulcrologic.rad.test-schema.address/enabled?
+                 false]])))
+  (let [id    (ids/new-uuid 1)
+        delta {[::address/id id] {::address/id       {:before id :after id}
+                                  ::address/enabled? {:before false :after nil}}}]
+    (let [{:keys [txn]} (datomic/delta->txn *env* :production delta)]
+      (assertions
+        "removing boolean false does a retract"
+        txn => [[:db/retract
+                 [:com.fulcrologic.rad.test-schema.address/id
+                  #uuid "ffffffff-ffff-ffff-ffff-000000000001"]
+                 :com.fulcrologic.rad.test-schema.address/enabled?
+                 false]]))))
 
 (specification "delta->txn: simple flat delta, existing entity, non-native ID. ADD to-one ATTRIBUTE"
   (let [id    (ids/new-uuid 1)
