@@ -32,6 +32,7 @@
    :instant  :db.type/instant
    :keyword  :db.type/keyword
    :symbol   :db.type/symbol
+   :tuple    :db.type/tuple
    :ref      :db.type/ref
    :uuid     :db.type/uuid})
 
@@ -479,8 +480,9 @@
     (doseq [attr all-attributes
             :let [{attr-schema      ::attr/schema
                    attr-cardinality ::attr/cardinality
+                   ::keys           [native-id?]
                    ::attr/keys      [qualified-key type]} attr]]
-      (when (= attr-schema schema)
+      (when (and (= attr-schema schema) (not native-id?))
         (log/debug "Checking schema" schema "attribute" qualified-key)
         (let [{:db/keys [cardinality valueType]} (d/pull db '[{:db/cardinality [:db/ident]} {:db/valueType [:db/ident]}] qualified-key)
               cardinality (get cardinality :db/ident :one)
