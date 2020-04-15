@@ -226,3 +226,8 @@ edit the `defaults.edn` file in `src/example/config` and update the database par
 ```
 
 
+== License and Copyright
+
+This library is Copyright 2020 by Fulcrologic, LLC. All rights reserved.
+
+Formal licensing of this library has yet to be determined.
