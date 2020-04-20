@@ -389,13 +389,13 @@
       txn)))
 
 (defn config->postgres-url [{:postgresql/keys [user host port password database]
-                             datomic-db       :datomic/database}]
-  (assert user ":postgresql/user must be specified")
-  (assert host ":postgresql/host must be specified")
-  (assert port ":postgresql/port must be specified")
-  (assert password ":postgresql/password must be specified")
-  (assert database ":postgresql/database must be specified")
-  (assert datomic-db ":datomic/database must be specified")
+                             datomic-db       :datomic/database
+                             :or              {user       "datomic"
+                                               password   "datomic"
+                                               host       "localhost"
+                                               port       5432
+                                               database   "datomic"
+                                               datomic-db "demo"}}]
   (str "datomic:sql://" datomic-db "?jdbc:postgresql://" host (when port (str ":" port)) "/"
     database "?user=" user "&password=" password))
 
