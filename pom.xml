@@ -4,12 +4,12 @@
   <groupId>com.fulcrologic</groupId>
   <artifactId>fulcro-rad-datomic</artifactId>
   <packaging>jar</packaging>
-  <version>0.0.1-alpha-13-SNAPSHOT</version>
+  <version>0.0.2-alpha</version>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
-  <name>Fulcro RAD</name>
-  <description>Datomic plugin for Fulcro RAD</description>
+  <name>Fulcro RAD Datomic</name>
+  <description>A Datomic database driver for Fulcro RAD.</description>
   <url>https://github.com/fulcrologic/fulcro-rad-datomic</url>
   <licenses>
     <license>
