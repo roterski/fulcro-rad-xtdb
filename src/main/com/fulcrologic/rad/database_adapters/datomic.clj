@@ -22,18 +22,20 @@
     [taoensso.timbre :as log]))
 
 (def type-map
-  {:string   :db.type/string
-   :enum     :db.type/ref
-   :boolean  :db.type/boolean
-   :password :db.type/string
-   :int      :db.type/long
-   :long     :db.type/long
+  {:boolean  :db.type/boolean
    :decimal  :db.type/bigdec
+   :double   :db.type/double
+   :enum     :db.type/ref
+   :float    :db.type/float
    :instant  :db.type/instant
+   :int      :db.type/long
    :keyword  :db.type/keyword
+   :long     :db.type/long
+   :password :db.type/string
+   :ref      :db.type/ref
+   :string   :db.type/string
    :symbol   :db.type/symbol
    :tuple    :db.type/tuple
-   :ref      :db.type/ref
    :uuid     :db.type/uuid})
 
 (>defn pathom-query->datomic-query [all-attributes pathom-query]
