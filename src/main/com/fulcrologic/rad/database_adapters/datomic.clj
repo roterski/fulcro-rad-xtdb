@@ -225,27 +225,36 @@
           entity-delta))
       delta)))
 
-(defn generate-next-id [{::attr/keys [key->attribute] :as env} k]
-  (let [{::keys      [native-id?]
-         ::attr/keys [type]} (key->attribute k)]
-    (cond
-      native-id? nil
-      (= :uuid type) (next-uuid)
-      :otherwise (throw (ex-info "Cannot generate an ID for non-native ID attribute" {:attribute k})))))
+(defn generate-next-id
+  "Generate an id. You may pass a `suggested-id` as a UUID or a tempid. If it is a tempid and the ID column is a UUID, then
+  the UUID *from* the tempid will be used. If the ID column is not a UUID then the suggested id is ignored. Returns nil for
+  native ID columns."
+  ([{::attr/keys [key->attribute] :as env} k]
+   (generate-next-id env k (next-uuid)))
+  ([{::attr/keys [key->attribute] :as env} k suggested-id]
+   (let [{::keys      [native-id?]
+          ::attr/keys [type]} (key->attribute k)]
+     (cond
+       native-id? nil
+       (= :uuid type) (cond
+                        (tempid/tempid? suggested-id) (:id suggested-id)
+                        (uuid? suggested-id) suggested-id
+                        :else (next-uuid))
+       :otherwise (throw (ex-info "Cannot generate an ID for non-native ID attribute" {:attribute k}))))))
 
-(defn tempids->generate-ids [{::attr/keys [key->attribute] :as env} delta]
+(defn tempids->generated-ids [{::attr/keys [key->attribute] :as env} delta]
   (let [idents (keys delta)
         fulcro-tempid->generated-id
                (into {} (keep (fn [[k id :as ident]]
                                 (when (and (tempid/tempid? id) (not (native-ident? env ident)))
-                                  [id (generate-next-id env k)])) idents))]
+                                  [id (generate-next-id env k id)])) idents))]
     fulcro-tempid->generated-id))
 
 (>defn delta->txn
   [env schema delta]
   [map? keyword? map? => map?]
   (let [tempid->txid                 (tempid->intermediate-id env delta)
-        tempid->generated-id         (tempids->generate-ids env delta)
+        tempid->generated-id         (tempids->generated-ids env delta)
         non-native-id-attributes-txn (keep
                                        (fn [[k id :as ident]]
                                          (when (and (tempid/tempid? id) (uuid-ident? env ident))
