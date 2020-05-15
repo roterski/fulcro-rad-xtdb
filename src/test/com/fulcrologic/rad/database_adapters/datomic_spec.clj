@@ -13,7 +13,8 @@
     [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
     [com.fulcrologic.rad.pathom :as pathom]
     [taoensso.timbre :as log]
-    [datomic.api :as d]))
+    [datomic.api :as d]
+    [clojure.set :as set]))
 
 (declare =>)
 
@@ -23,6 +24,7 @@
                              [qualified-key a]))
                       all-attributes))
 (def ^:dynamic *conn* nil)
+()
 (def ^:dynamic *env* {})
 
 (defn with-reset-database [tests]
@@ -73,20 +75,17 @@
 
 (specification "delta->txn: simple flat delta, new entity, non-native ID. CREATE"
   (let [id1             (tempid/tempid (ids/new-uuid 1))
-        expected-new-id (ids/new-uuid 2)
+        expected-new-id (ids/new-uuid 1)
         str-id          (str (:id id1))
         delta           {[::address/id id1] {::address/id     {:after id1}
                                              ::address/street {:after "111 Main St"}}}]
-    (when-mocking
-      (datomic/next-uuid) => expected-new-id
-
-      (let [{:keys [tempid->string txn]} (datomic/delta->txn *env* :production delta)]
-        (assertions
-          "includes tempid temporary mapping"
-          (get tempid->string id1) => "ffffffff-ffff-ffff-ffff-000000000001"
-          "Includes an add for the specific facts changed"
-          txn => [[:db/add str-id ::address/id expected-new-id]
-                  [:db/add str-id ::address/street "111 Main St"]])))))
+    (let [{:keys [tempid->string txn]} (datomic/delta->txn *env* :production delta)]
+      (assertions
+        "includes tempid temporary mapping"
+        (get tempid->string id1) => "ffffffff-ffff-ffff-ffff-000000000001"
+        "Includes an add for the specific facts changed"
+        txn => [[:db/add str-id ::address/id expected-new-id]
+                [:db/add str-id ::address/street "111 Main St"]]))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; To-one
@@ -266,6 +265,7 @@
         tempid3         (tempid/tempid (ids/new-uuid 3))
         new-address-id1 (ids/new-uuid 1)
         new-address-id2 (ids/new-uuid 2)
+        new-address-id3 (ids/new-uuid 3)
         sid1            "ffffffff-ffff-ffff-ffff-000000000001"
         sid2            "ffffffff-ffff-ffff-ffff-000000000002"
         sid3            "ffffffff-ffff-ffff-ffff-000000000003"
@@ -274,23 +274,23 @@
                                                  ::person/primary-address {:after [::address/id tempid2]}
                                                  ::person/addresses       {:after [[::address/id tempid2] [::address/id tempid3]]}}
                          [::address/id tempid2] {::address/id     {:after tempid2}
-                                                 ::address/street "A St"}
+                                                 ::address/street {:after "A St"}}
                          [::address/id tempid3] {::address/id     {:after tempid3}
-                                                 ::address/street "B St"}}]
-    (when-mocking
-      (datomic/next-uuid) =1x=> new-address-id1
-      (datomic/next-uuid) =1x=> new-address-id2
-
-      (let [{:keys [txn]} (datomic/delta->txn *env* :production delta)]
-        (assertions
-          "Adds the non-native IDs, and the proper values"
-          (set txn) => #{[:db/add sid2 :com.fulcrologic.rad.test-schema.address/id new-address-id1]
-                         [:db/add sid3 :com.fulcrologic.rad.test-schema.address/id new-address-id2]
-                         [:db/add sid1 :com.fulcrologic.rad.test-schema.person/full-name "Tony"]
-                         [:db/add sid1 :com.fulcrologic.rad.test-schema.person/primary-address sid2]
-                         [:db/add sid1 :com.fulcrologic.rad.test-schema.person/addresses sid3]
-                         [:db/add sid1 :com.fulcrologic.rad.test-schema.person/addresses sid2]}
-          (runnable? txn) => true)))))
+                                                 ::address/street {:after "B St"}}}
+        expected        #{[:db/add sid2 :com.fulcrologic.rad.test-schema.address/id new-address-id2]
+                          [:db/add sid3 :com.fulcrologic.rad.test-schema.address/id new-address-id3]
+                          [:db/add sid1 :com.fulcrologic.rad.test-schema.person/full-name "Tony"]
+                          [:db/add sid2 :com.fulcrologic.rad.test-schema.address/street "A St"]
+                          [:db/add sid3 :com.fulcrologic.rad.test-schema.address/street "B St"]
+                          [:db/add sid1 :com.fulcrologic.rad.test-schema.person/primary-address sid2]
+                          [:db/add sid1 :com.fulcrologic.rad.test-schema.person/addresses sid3]
+                          [:db/add sid1 :com.fulcrologic.rad.test-schema.person/addresses sid2]}]
+    (let [{:keys [txn]} (datomic/delta->txn *env* :production delta)]
+      (assertions
+        "Adds the non-native IDs, and the proper values"
+        (set/difference (set txn) expected) => #{}
+        (set txn) => expected
+        (runnable? txn) => true))))
 
 (specification "Existing entity, add new to-one child"
   (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id             "id"
@@ -303,16 +303,13 @@
         delta           {[::person/id id]       {::person/primary-address {:after [::address/id tempid1]}}
                          [::address/id tempid1] {::address/id     {:after tempid1}
                                                  ::address/street {:after "B St"}}}]
-    (when-mocking
-      (datomic/next-uuid) =1x=> new-address-id1
-
-      (let [{:keys [txn]} (datomic/delta->txn *env* :production delta)]
-        (assertions
-          "Adds the non-native IDs, and the proper values"
-          (set txn) => #{[:db/add sid1 :com.fulcrologic.rad.test-schema.address/id new-address-id1]
-                         [:db/add id :com.fulcrologic.rad.test-schema.person/primary-address sid1]
-                         [:db/add sid1 ::address/street "B St"]}
-          (runnable? txn) => true)))))
+    (let [{:keys [txn]} (datomic/delta->txn *env* :production delta)]
+      (assertions
+        "Adds the non-native IDs, and the proper values"
+        (set txn) => #{[:db/add sid1 :com.fulcrologic.rad.test-schema.address/id new-address-id1]
+                       [:db/add id :com.fulcrologic.rad.test-schema.person/primary-address sid1]
+                       [:db/add sid1 ::address/street "B St"]}
+        (runnable? txn) => true))))
 
 (specification "Existing entity, add new to-many child"
   (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id             "id"
@@ -326,18 +323,15 @@
                                                                      :after  [[::address/id (ids/new-uuid 1)] [::address/id tempid1]]}}
                          [::address/id tempid1] {::address/id     {:after tempid1}
                                                  ::address/street {:after "B St"}}}]
-    (when-mocking
-      (datomic/next-uuid) =1x=> new-address-id1
-
-      (let [{:keys [tempid->string txn]} (datomic/delta->txn *env* :production delta)]
-        (assertions
-          "Includes remappings for new entities"
-          tempid->string => {tempid1 sid1}
-          "Adds the non-native IDs, and the proper values"
-          (set txn) => #{[:db/add sid1 :com.fulcrologic.rad.test-schema.address/id new-address-id1]
-                         [:db/add id :com.fulcrologic.rad.test-schema.person/addresses sid1]
-                         [:db/add sid1 ::address/street "B St"]}
-          (runnable? txn) => true)))))
+    (let [{:keys [tempid->string txn]} (datomic/delta->txn *env* :production delta)]
+      (assertions
+        "Includes remappings for new entities"
+        tempid->string => {tempid1 sid1}
+        "Adds the non-native IDs, and the proper values"
+        (set txn) => #{[:db/add sid1 :com.fulcrologic.rad.test-schema.address/id new-address-id1]
+                       [:db/add id :com.fulcrologic.rad.test-schema.person/addresses sid1]
+                       [:db/add sid1 ::address/street "B St"]}
+        (runnable? txn) => true))))
 
 (specification "Existing entity, change to-many children"
   (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id             "id"
@@ -351,19 +345,16 @@
                                                                      :after  [[::address/id tempid1]]}}
                          [::address/id tempid1] {::address/id     {:after tempid1}
                                                  ::address/street {:after "B St"}}}]
-    (when-mocking
-      (datomic/next-uuid) =1x=> new-address-id1
-
-      (let [{:keys [tempid->string txn]} (datomic/delta->txn *env* :production delta)]
-        (assertions
-          "Includes remappings for new entities"
-          tempid->string => {tempid1 sid1}
-          "Adds the non-native IDs, and the proper values"
-          (set txn) => #{[:db/add sid1 :com.fulcrologic.rad.test-schema.address/id new-address-id1]
-                         [:db/add id :com.fulcrologic.rad.test-schema.person/addresses sid1]
-                         [:db/retract id :com.fulcrologic.rad.test-schema.person/addresses [::address/id (ids/new-uuid 1)]]
-                         [:db/add sid1 ::address/street "B St"]}
-          (runnable? txn) => true)))))
+    (let [{:keys [tempid->string txn]} (datomic/delta->txn *env* :production delta)]
+      (assertions
+        "Includes remappings for new entities"
+        tempid->string => {tempid1 sid1}
+        "Adds the non-native IDs, and the proper values"
+        (set txn) => #{[:db/add sid1 :com.fulcrologic.rad.test-schema.address/id new-address-id1]
+                       [:db/add id :com.fulcrologic.rad.test-schema.person/addresses sid1]
+                       [:db/retract id :com.fulcrologic.rad.test-schema.person/addresses [::address/id (ids/new-uuid 1)]]
+                       [:db/add sid1 ::address/street "B St"]}
+        (runnable? txn) => true))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
