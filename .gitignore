@@ -21,3 +21,5 @@ target
 .cpcache
 .shadow-cljs
 .clj-kondo/.cache
+pom.xml.releaseBackup
+release.properties
