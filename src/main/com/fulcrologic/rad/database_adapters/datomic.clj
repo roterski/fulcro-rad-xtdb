@@ -428,11 +428,19 @@
   (assert datomic-db ":datomic/database must be specified")
   (str "datomic:free://" host ":" port "/" datomic-db))
 
+(defn config->dev-url [{:dev/keys [host port]
+                         datomic-db :datomic/database}]
+  (assert host ":dev/host must be specified")
+  (assert port ":dev/port must be specified")
+  (assert datomic-db ":datomic/database must be specified")
+  (str "datomic:dev://" host ":" port "/" datomic-db))
+
 (defn config->url [{:datomic/keys [driver]
                     :as           config}]
   (case driver
     :mem (str "datomic:mem://" (:datomic/database config))
     :free (config->free-url config)
+    :dev (config->dev-url config)
     :postgresql (config->postgres-url config)
     :mysql (config->mysql-url config)
     (throw (ex-info "Unsupported Datomic driver." {:driver driver}))))
