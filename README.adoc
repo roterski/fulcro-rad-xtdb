@@ -1,7 +1,9 @@
 = Datomic Database Plugin
 
-This library is currently Alpha and may have out-of-date documentation. Paid support
-can be obtained from http://www.fulcrologic.com[Fulcrologic, LLC].
+This library is may have out-of-date documentation. See the current version of the https://github.com/fulcrologic/fulcro-rad-demo[Fulcro RAD Demo] 
+for an accurate representation of usage.
+
+Paid support can be obtained from http://www.fulcrologic.com[Fulcrologic, LLC].
 
 image:https://img.shields.io/clojars/v/com.fulcrologic/fulcro-rad-datomic.svg[link=https://clojars.org/com.fulcrologic/fulcro-rad-datomic]
 
