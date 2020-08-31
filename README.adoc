@@ -15,7 +15,7 @@ image:https://circleci.com/gh/fulcrologic/fulcro-rad-datomic/tree/master.svg?sty
 
 This is a plugin for Fulcro RAD that adds support for using Datomic databases as the back-end technology.
 
-NOTE: The current version supports on-prem Datomic Pro (PostgreSQL or MySQL backends), Datomic Free, or Mem stores. Make sure
+NOTE: The current version supports on-prem Datomic Pro (PostgreSQL or MySQL backends), Datomic Free, or Mem stores, as well as Datomic Cloud. Make sure
 you do not accidentally get Datomic Free and Datomic Pro BOTH on the CLASSPATH. If you're using deps you should make
 sure you use something like:
 
@@ -36,9 +36,12 @@ The following namespace aliases are used in the content of this document:
 -----
 (ns x
   (:require
-    [com.fulcrologic.rad.attributes :as attr]
-    [com.fulcrologic.rad.database-adapters.datomic :as datomic]))
+     [com.fulcrologic.rad.attributes :as attr]
+     [com.fulcrologic.rad.database-adapters.datomic :as datomic]
+; or [com.fulcrologic.rad.database-adapters.datomic-cloud :as datomic] for Datomic Cloud support
+     [com.fulcrologic.rad.database-adapters.datomic-options :as do]))
 -----
+
 
 == Schemas
 
@@ -64,11 +67,7 @@ assumed.
 `::attr/cardinality`:: `:one` or `:many` (or you can specify it with normal datomic keys).
 `::attr/schema keyword`:: (required) A name that groups together attributes that go together in a schema
 on a database. A schema can be used on any number of databased (e.g. for sharding).
-
-The plugin-specific attribute parameters are:
-
-`::datomic/native-id?`:: If true it will map the given ID attribute (which must be type long) to `:db/id`.
-`::datomic/entity-ids #{k k2 ...}`:: Required on *non*-identity attributes.
+`::attr/identities #{k k2 ...}`:: Required on *non*-identity attributes.
 A set of attribute keys that are `:attr/identity? true`. This
 set indicates that the attribute can be *placed* on an entity that is identified by one of those identity attributes.
 This allows the Datomic plugin to figure out which properties can be co-located on an entity for storage
@@ -76,6 +75,12 @@ in form saves and queries in resolvers. It is a set in order to support the fact
 an attribute to appear on any entity, but your domain model will put it on a more limited subset of
 different entities. Failing to list this entry will result in failure to generate resolvers
 or form save logic for the attribute.
+
+The plugin-specific attribute parameters are:
+
+`do/native-id?`:: If true it will map the given ID attribute (which must be type long) to `:db/id`.
+`do/attribute-schema`:: A map of datomic schema attributes to be included in transacted schema.
+example:  {:db/isComponent true}
 
 *Any* of the normal Datomic schema definition attributes can be included as well (e.g. `:db/cardinality`), and
 will take precedence over anything above. Be careful when changing these, as the result can cause
@@ -178,7 +183,7 @@ it can also be used to generate a constant (well-known) UUID for testing.
 
 === A Sample Test
 
-The core function to use is `datomic/empty-db-connection`, which can work with
+If you are using on-prem, the core function to use is `datomic/empty-db-connection`, which can work with
 automatically-generated schema or a manual schema. It returns a Datomic connection
 which has the supplied schema (and is memoized for fast startup on sequences of tests).
 
@@ -200,6 +205,9 @@ A typical test might look like the following:
 
 NOTE: The connection is memoized based on the schema key (not any supplied migration data). You
 can use `(datomic/reset-test-schema k)` to forget the current memoized version.
+
+For Datomic Cloud, the current recommendation is to use the https://github.com/ComputeSoftware/dev-local-tu[dev-local-tu] library.
+See the https://github.com/fulcrologic/fulcro-rad-demo[fulcrologic/fulcro-rad-demo] for an example.
 
 == Resolver Generation
 

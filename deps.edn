@@ -11,14 +11,21 @@
            org.clojure/clojure        {:mvn/version "1.10.1"}}
 
  :aliases {:test      {:extra-paths ["src/test"]
-                       :extra-deps  {fulcrologic/fulcro-spec {:mvn/version "3.1.5"}}}
+                       :extra-deps  {fulcrologic/fulcro-spec {:mvn/version "3.1.5"}
+                                     dev-local-tu            {:mvn/version "0.1.0"}
+
+                                     ; N.B. - follow instuctions for installing dev-local
+                                     ; https://docs.datomic.com/cloud/dev-local.html#using
+                                     com.datomic/dev-local {:mvn/version "0.9.184"}}}
 
            :clj-tests {:extra-paths ["src/test"]
                        :main-opts   ["-m" "kaocha.runner"]
                        :extra-deps  {lambdaisland/kaocha {:mvn/version "1.0.632"}}}
 
            :provided  {:extra-deps {com.datomic/datomic-free {:mvn/version "0.9.5697"
-                                                              :exclusions  [org.slf4j/slf4j-nop]}}}
+                                                              :exclusions  [org.slf4j/slf4j-nop]}
+                                    com.datomic/client-cloud {:mvn/version "0.8.102"}
+                                    }}
 
            :dev       {:extra-paths ["src/dev" "resources"]
                        :extra-deps  {org.clojure/tools.namespace {:mvn/version "1.0.0"}}}}}

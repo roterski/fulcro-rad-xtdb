@@ -1,4 +1,4 @@
-(ns com.fulcrologic.rad.database-adapters.datomic-spec
+(ns com.fulcrologic.rad.database-adapters.datomic-cloud-spec
   (:require
     [fulcro-spec.core :refer [specification assertions component behavior when-mocking]]
     [com.fulcrologic.rad.ids :as ids]
@@ -8,14 +8,14 @@
     [com.fulcrologic.rad.test-schema.thing :as thing]
     [com.fulcrologic.rad.attributes :as attr]
     [fulcro-spec.core :refer [specification assertions]]
-    [com.fulcrologic.rad.database-adapters.datomic :as datomic]
+    [com.fulcrologic.rad.database-adapters.datomic-cloud :as datomic]
     [com.fulcrologic.rad.database-adapters.datomic-common :as common]
     [clojure.test :refer [use-fixtures]]
     [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
     [com.fulcrologic.rad.pathom :as pathom]
+    [dev-local-tu.core :as dev-local-tu]
+    [datomic.client.api :as d]
     [taoensso.timbre :as log]
-    [datomic.api :as d]
-    [clojure.set :as set]
     [com.fulcrologic.rad.database-adapters.datomic-options :as do]))
 
 (declare =>)
@@ -25,30 +25,43 @@
                       (map (fn [{::attr/keys [qualified-key] :as a}]
                              [qualified-key a]))
                       all-attributes))
+
 (def ^:dynamic *conn* nil)
-()
 (def ^:dynamic *env* {})
 
-(defn with-reset-database [tests]
-  (datomic/reset-migrated-dbs!)
-  (tests))
 
 (defn with-env [tests]
-  (let [conn (datomic/empty-db-connection all-attributes :production)]
-    (binding [*conn* conn
-              *env* {::attr/key->attribute key->attribute
-                     do/connections        {:production conn}}]
-      (tests))))
+  (with-open [db-env (dev-local-tu/test-env)]
+    (let [config {:datomic/env         :test
+                  :datomic/schema      :production
+                  :datomic/database    (str (gensym "test-database"))
+                  :datomic/test-client (:client db-env)}
+          conn (datomic/start-database! all-attributes config {})]
+      (binding [*conn* conn
+                *env* {::attr/key->attribute key->attribute
+                       do/connections        {:production conn}}]
+        (tests)))))
 
-(use-fixtures :once with-reset-database)
 (use-fixtures :each with-env)
 
 (defn runnable? [txn]
   (try
-    @(d/transact *conn* txn)
+    (d/transact *conn* {:tx-data txn})
     true
     (catch Exception e
       (.getMessage e))))
+
+(specification "fail-safe ID"
+  (let [id1 (ids/new-uuid 1)
+        tid (tempid/tempid id1)]
+    (assertions
+      "is the Datomic :db/id when using native IDs"
+      (common/failsafe-id *env* [::person/id 42]) => 42
+      "is the ident when using custom IDs that are not temporary"
+      (common/failsafe-id *env* [::address/id (ids/new-uuid 1)]) => [::address/id (ids/new-uuid 1)]
+      "is a string-version of the tempid when the id of the ident is a tempid"
+      (common/failsafe-id *env* [::person/id tid]) => "ffffffff-ffff-ffff-ffff-000000000001"
+      (common/failsafe-id *env* [::address/id tid]) => "ffffffff-ffff-ffff-ffff-000000000001")))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; To-one
@@ -56,8 +69,8 @@
 
 (specification "delta->txn: simple flat delta, existing entity, non-native ID. UPDATE to-one"
   (let [id (ids/new-uuid 1)
-        _ @(d/transact *conn* [{::address/id     (ids/new-uuid 1)
-                                ::address/street "111 Main"}])
+        _ (d/transact *conn* {:tx-data [{::address/id     (ids/new-uuid 1)
+                                         ::address/street "111 Main"}]})
         delta {[::address/id id] {::address/id     {:before id :after id}
                                   ::address/street {:before "111 Main" :after "111 Main St"}}}]
     (let [{:keys [tempid->string txn]} (common/delta->txn *env* :production delta)]
@@ -92,7 +105,7 @@
 
 (specification "delta->txn: simple flat delta, existing entity, non-native ID. ADD to-one ATTRIBUTE"
   (let [id (ids/new-uuid 1)
-        _ @(d/transact *conn* [{::address/id (ids/new-uuid 1)}])
+        _ (d/transact *conn* {:tx-data [{::address/id (ids/new-uuid 1)}]})
         delta {[::address/id id] {::address/street {:after "111 Main St"}}}]
     (let [{:keys [txn]} (common/delta->txn *env* :production delta)]
       (assertions
@@ -102,8 +115,8 @@
 
 (specification "delta->txn: simple flat delta, existing entity, non-native ID. DELETE to-one ATTRIBUTE"
   (let [id (ids/new-uuid 1)
-        _ @(d/transact *conn* [{::address/id     (ids/new-uuid 1)
-                                ::address/street "111 Main"}])
+        _ (d/transact *conn* {:tx-data [{::address/id     (ids/new-uuid 1)
+                                         ::address/street "111 Main"}]})
         delta {[::address/id id] {::address/id     {:before id :after id}
                                   ::address/street {:before "111 Main" :after nil}}}]
     (let [{:keys [tempid->string txn]} (common/delta->txn *env* :production delta)]
@@ -128,8 +141,8 @@
         (runnable? txn) => true))))
 
 (specification "delta->txn: simple flat delta, existing entity, native ID, ADD attribute"
-  (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id             "id"
-                                                      ::person/full-name "Bob"}])
+  (let [{{:strs [id]} :tempids} (d/transact *conn* {:tx-data [{:db/id             "id"
+                                                               ::person/full-name "Bob"}]})
         delta {[::person/id id] {::person/email {:after "joe@nowhere.net"}}}]
     (let [{:keys [txn]} (common/delta->txn *env* :production delta)]
       (assertions
@@ -138,8 +151,8 @@
         (runnable? txn) => true))))
 
 (specification "delta->txn: simple flat delta, existing entity, native ID, UPDATE attribute"
-  (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id             "id"
-                                                      ::person/full-name "Bob"}])
+  (let [{{:strs [id]} :tempids} (d/transact *conn* {:tx-data [{:db/id             "id"
+                                                               ::person/full-name "Bob"}]})
         delta {[::person/id id] {::person/full-name {:before "Bob" :after "Bobby"}}}]
     (let [{:keys [txn]} (common/delta->txn *env* :production delta)]
       (assertions
@@ -148,8 +161,8 @@
         (runnable? txn) => true))))
 
 (specification "delta->txn: simple flat delta, existing entity, native ID, DELETE attribute"
-  (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id             "id"
-                                                      ::person/full-name "Bob"}])
+  (let [{{:strs [id]} :tempids} (d/transact *conn* {:tx-data [{:db/id             "id"
+                                                               ::person/full-name "Bob"}]})
         delta {[::person/id id] {::person/full-name {:before "Bob"}}}]
     (let [{:keys [txn]} (common/delta->txn *env* :production delta)]
       (assertions
@@ -163,8 +176,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (specification "delta->txn: simple flat delta, existing entity, native ID, ADD to-one enum"
-  (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id             "id"
-                                                      ::person/full-name "Bob"}])
+  (let [{{:strs [id]} :tempids} (d/transact *conn* {:tx-data [{:db/id             "id"
+                                                               ::person/full-name "Bob"}]})
         delta {[::person/id id] {::person/role {:after :com.fulcrologic.rad.test-schema.person.role/admin}}}]
     (let [{:keys [txn]} (common/delta->txn *env* :production delta)]
       (assertions
@@ -173,9 +186,9 @@
         (runnable? txn) => true))))
 
 (specification "delta->txn: simple flat delta, existing entity, native ID, REMOVE to-one enum"
-  (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id             "id"
-                                                      ::person/role      :com.fulcrologic.rad.test-schema.person.role/admin
-                                                      ::person/full-name "Bob"}])
+  (let [{{:strs [id]} :tempids} (d/transact *conn* {:tx-data [{:db/id             "id"
+                                                               ::person/role      :com.fulcrologic.rad.test-schema.person.role/admin
+                                                               ::person/full-name "Bob"}]})
         delta {[::person/id id] {::person/role {:before :com.fulcrologic.rad.test-schema.person.role/admin}}}]
     (let [{:keys [txn]} (common/delta->txn *env* :production delta)]
       (assertions
@@ -188,9 +201,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (specification "delta->txn: simple flat delta, existing entity, non-native ID, UPDATE (ADD) to-many enum"
-  (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id               "id"
-                                                      ::person/permissions [:com.fulcrologic.rad.test-schema.person.permissions/read
-                                                                            :com.fulcrologic.rad.test-schema.person.permissions/write]}])
+  (let [{{:strs [id]} :tempids} (d/transact *conn* {:tx-data [{:db/id               "id"
+                                                               ::person/permissions [:com.fulcrologic.rad.test-schema.person.permissions/read
+                                                                                     :com.fulcrologic.rad.test-schema.person.permissions/write]}]})
         delta {[::person/id id] {::person/permissions {:before [:com.fulcrologic.rad.test-schema.person.permissions/read
                                                                 :com.fulcrologic.rad.test-schema.person.permissions/write]
                                                        :after  [:com.fulcrologic.rad.test-schema.person.permissions/read
@@ -204,9 +217,9 @@
 
 
 (specification "delta->txn: simple flat delta, existing entity, non-native ID, UPDATE (add/remove) to-many enum"
-  (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id               "id"
-                                                      ::person/permissions [:com.fulcrologic.rad.test-schema.person.permissions/read
-                                                                            :com.fulcrologic.rad.test-schema.person.permissions/write]}])
+  (let [{{:strs [id]} :tempids} (d/transact *conn* {:tx-data [{:db/id               "id"
+                                                               ::person/permissions [:com.fulcrologic.rad.test-schema.person.permissions/read
+                                                                                     :com.fulcrologic.rad.test-schema.person.permissions/write]}]})
         delta {[::person/id id] {::person/permissions {:before [:com.fulcrologic.rad.test-schema.person.permissions/read
                                                                 :com.fulcrologic.rad.test-schema.person.permissions/write]
                                                        :after  [:com.fulcrologic.rad.test-schema.person.permissions/execute]}}}]
@@ -236,33 +249,29 @@
                                        ::person/primary-address {:after [::address/id tempid2]}
                                        ::person/addresses       {:after [[::address/id tempid2] [::address/id tempid3]]}}
                [::address/id tempid2] {::address/id     {:after tempid2}
-                                       ::address/street {:after "A St"}}
+                                       ::address/street "A St"}
                [::address/id tempid3] {::address/id     {:after tempid3}
-                                       ::address/street {:after "B St"}}}
-
-        expected #{[:db/add sid2 :com.fulcrologic.rad.test-schema.address/id new-address-id1]
-                   [:db/add sid3 :com.fulcrologic.rad.test-schema.address/id new-address-id2]
-                   [:db/add sid1 :com.fulcrologic.rad.test-schema.person/full-name "Tony"]
-                   [:db/add sid2 :com.fulcrologic.rad.test-schema.address/street "A St"]
-                   [:db/add sid3 :com.fulcrologic.rad.test-schema.address/street "B St"]
-                   [:db/add sid1 :com.fulcrologic.rad.test-schema.person/primary-address sid2]
-                   [:db/add sid1 :com.fulcrologic.rad.test-schema.person/addresses sid3]
-                   [:db/add sid1 :com.fulcrologic.rad.test-schema.person/addresses sid2]}]
+                                       ::address/street "B St"}}]
     (when-mocking
       (common/next-uuid) =1x=> new-address-id1
       (common/next-uuid) =1x=> new-address-id2
+
       (let [{:keys [txn]} (common/delta->txn *env* :production delta)]
         (assertions
           "Adds the non-native IDs, and the proper values"
-          (set/difference (set txn) expected) => #{}
-          (set txn) => expected
+          (set txn) => #{[:db/add sid2 :com.fulcrologic.rad.test-schema.address/id new-address-id1]
+                         [:db/add sid3 :com.fulcrologic.rad.test-schema.address/id new-address-id2]
+                         [:db/add sid1 :com.fulcrologic.rad.test-schema.person/full-name "Tony"]
+                         [:db/add sid1 :com.fulcrologic.rad.test-schema.person/primary-address sid2]
+                         [:db/add sid1 :com.fulcrologic.rad.test-schema.person/addresses sid3]
+                         [:db/add sid1 :com.fulcrologic.rad.test-schema.person/addresses sid2]}
           (runnable? txn) => true)))))
 
 (specification "Existing entity, add new to-one child"
-  (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id             "id"
-                                                      ::person/full-name "Bob"
-                                                      ::person/addresses [{::address/id     (ids/new-uuid 1)
-                                                                           ::address/street "A St"}]}])
+  (let [{{:strs [id]} :tempids} (d/transact *conn* {:tx-data [{:db/id             "id"
+                                                               ::person/full-name "Bob"
+                                                               ::person/addresses [{::address/id     (ids/new-uuid 1)
+                                                                                    ::address/street "A St"}]}]})
         tempid1 (tempid/tempid (ids/new-uuid 1))
         new-address-id1 (ids/new-uuid 1)
         sid1 "ffffffff-ffff-ffff-ffff-000000000001"
@@ -271,6 +280,7 @@
                                        ::address/street {:after "B St"}}}]
     (when-mocking
       (common/next-uuid) =1x=> new-address-id1
+
       (let [{:keys [txn]} (common/delta->txn *env* :production delta)]
         (assertions
           "Adds the non-native IDs, and the proper values"
@@ -280,10 +290,10 @@
           (runnable? txn) => true)))))
 
 (specification "Existing entity, add new to-many child"
-  (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id             "id"
-                                                      ::person/full-name "Bob"
-                                                      ::person/addresses [{::address/id     (ids/new-uuid 1)
-                                                                           ::address/street "A St"}]}])
+  (let [{{:strs [id]} :tempids} (d/transact *conn* {:tx-data [{:db/id             "id"
+                                                               ::person/full-name "Bob"
+                                                               ::person/addresses [{::address/id     (ids/new-uuid 1)
+                                                                                    ::address/street "A St"}]}]})
         tempid1 (tempid/tempid (ids/new-uuid 1))
         new-address-id1 (ids/new-uuid 1)
         sid1 "ffffffff-ffff-ffff-ffff-000000000001"
@@ -305,10 +315,10 @@
           (runnable? txn) => true)))))
 
 (specification "Existing entity, change to-many children"
-  (let [{{:strs [id]} :tempids} @(d/transact *conn* [{:db/id             "id"
-                                                      ::person/full-name "Bob"
-                                                      ::person/addresses [{::address/id     (ids/new-uuid 1)
-                                                                           ::address/street "A St"}]}])
+  (let [{{:strs [id]} :tempids} (d/transact *conn* {:tx-data [{:db/id             "id"
+                                                               ::person/full-name "Bob"
+                                                               ::person/addresses [{::address/id     (ids/new-uuid 1)
+                                                                                    ::address/street "A St"}]}]})
         tempid1 (tempid/tempid (ids/new-uuid 100))
         new-address-id1 (ids/new-uuid 100)
         sid1 "ffffffff-ffff-ffff-ffff-000000000100"
@@ -336,7 +346,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (specification "save-form!"
-  (let [_ @(d/transact *conn* [{::address/id (ids/new-uuid 1) ::address/street "A St"}])
+  (let [_ (d/transact *conn* {:tx-data [{::address/id (ids/new-uuid 1) ::address/street "A St"}]})
         tempid1 (tempid/tempid (ids/new-uuid 100))
         delta {[::person/id tempid1]           {::person/id              tempid1
                                                 ::person/full-name       {:after "Bob"}
