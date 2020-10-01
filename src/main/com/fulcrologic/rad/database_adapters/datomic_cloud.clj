@@ -18,11 +18,14 @@
     [taoensso.timbre :as log]
     [com.fulcrologic.rad.database-adapters.datomic-options :as do]))
 
-(defn dbid->datomic-ident [db dbid]
-  (if-let [ident (:v (first (d/datoms db {:index      :eavt
-                                          :components [dbid :db/ident]})))]
-    ident
-    {:db/id dbid}))
+(defn ref-entity->ident [db {:db/keys [ident id] :as ent}]
+  (cond
+    ident ident
+    id (if-let [ident (:v (first (d/datoms db {:index      :eavt
+                                               :components [id :db/ident]})))]
+         ident
+         ent)
+    :else ent))
 
 (defn replace-ref-types
   "dbc   the database to query
@@ -38,10 +41,10 @@
           (fn [acc ref-k]
             (cond
               (and (get acc ref-k) (not (vector? (get acc ref-k))))
-              (update acc ref-k (comp (partial dbid->datomic-ident db) :db/id))
+              (update acc ref-k (partial ref-entity->ident db))
 
               (and (get acc ref-k) (vector? (get acc ref-k)))
-              (update acc ref-k #(mapv (comp (partial dbid->datomic-ident db) :db/id) %))
+              (update acc ref-k #(mapv (partial ref-entity->ident db) %))
 
               :else acc))
           arg
