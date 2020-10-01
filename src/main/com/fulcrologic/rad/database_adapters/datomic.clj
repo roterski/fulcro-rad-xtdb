@@ -20,17 +20,10 @@
     [taoensso.encore :as enc]
     [taoensso.timbre :as log]))
 
-(defonce ident-cache (atom {}))
-
 (defn dbid->datomic-ident [db dbid]
-  (if-let [cached-ident (get @ident-cache dbid)]
-    cached-ident
-    (if-let [ident (:v (first (d/datoms db :eavt dbid :db/ident)))]
-      (do
-        (swap! ident-cache assoc dbid ident)
-        ident)
-      {:db/id dbid})))
-
+  (if-let [ident (:v (first (d/datoms db :eavt dbid :db/ident)))]
+    ident
+    {:db/id dbid}))
 
 (defn replace-ref-types
   "dbc   the database to query

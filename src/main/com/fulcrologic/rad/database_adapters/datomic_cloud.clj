@@ -18,17 +18,11 @@
     [taoensso.timbre :as log]
     [com.fulcrologic.rad.database-adapters.datomic-options :as do]))
 
-(defonce ident-cache (atom {}))
-
 (defn dbid->datomic-ident [db dbid]
-  (if-let [cached-ident (get @ident-cache dbid)]
-    cached-ident
-    (if-let [ident (:v (first (d/datoms db {:index      :eavt
-                                            :components [dbid :db/ident]})))]
-      (do
-        (swap! ident-cache assoc dbid ident)
-        ident)
-      {:db/id dbid})))
+  (if-let [ident (:v (first (d/datoms db {:index      :eavt
+                                          :components [dbid :db/ident]})))]
+    ident
+    {:db/id dbid}))
 
 (defn replace-ref-types
   "dbc   the database to query
