@@ -18,8 +18,18 @@
     [taoensso.timbre :as log]
     [com.fulcrologic.rad.database-adapters.datomic-options :as do]))
 
+(defonce ident-cache (atom {}))
 
-;; FIXME: There should be a client API query that runs on startup to find idents so that this is more efficient and also so we don't use the entity API.
+(defn dbid->datomic-ident [db dbid]
+  (if-let [cached-ident (get @ident-cache dbid)]
+    cached-ident
+    (if-let [ident (:v (first (d/datoms db {:index      :eavt
+                                            :components [dbid :db/ident]})))]
+      (do
+        (swap! ident-cache assoc dbid ident)
+        ident)
+      {:db/id dbid})))
+
 (defn replace-ref-types
   "dbc   the database to query
    refs  a set of keywords that ref datomic entities, which you want to access directly
@@ -34,9 +44,11 @@
           (fn [acc ref-k]
             (cond
               (and (get acc ref-k) (not (vector? (get acc ref-k))))
-              (update acc ref-k (comp :db/ident (partial d/pull db [:db/ident]) :db/id))
+              (update acc ref-k (comp (partial dbid->datomic-ident db) :db/id))
+
               (and (get acc ref-k) (vector? (get acc ref-k)))
-              (update acc ref-k #(mapv (comp :db/ident (partial d/pull db [:db/ident]) :db/id) %))
+              (update acc ref-k #(mapv (comp (partial dbid->datomic-ident db) :db/id) %))
+
               :else acc))
           arg
           refs)
@@ -47,15 +59,15 @@
   "like Datomic pull, but takes a collection of ids and returns
    a collection of entity maps"
   ([db pull-spec ids]
-   (let [lookup-ref?     (vector? (first ids))
-         order-map       (if lookup-ref?
-                           (into {} (map vector (map second ids) (range)))
-                           (into {} (map vector ids (range))))
-         sort-kw         (if lookup-ref? (ffirst ids) :db/id)
-         missing-ref?    (nil? (seq (filter #(= sort-kw %) pull-spec)))
-         pull-spec       (if missing-ref?
-                           (conj pull-spec sort-kw)
-                           pull-spec)]
+   (let [lookup-ref?  (vector? (first ids))
+         order-map    (if lookup-ref?
+                        (into {} (map vector (map second ids) (range)))
+                        (into {} (map vector ids (range))))
+         sort-kw      (if lookup-ref? (ffirst ids) :db/id)
+         missing-ref? (nil? (seq (filter #(= sort-kw %) pull-spec)))
+         pull-spec    (if missing-ref?
+                        (conj pull-spec sort-kw)
+                        pull-spec)]
      (->> pull-spec
        (d/q '[:find (pull ?id pattern)
               :in $ [?id ...] pattern]
@@ -197,9 +209,9 @@
   * `schemas` a map from schema name to either :auto, :none, or (fn [conn]).
   Returns a migrated database connection."
   [all-attributes {:datomic/keys [schema database] :as config} schemas]
-  (let [client          (config->client config)
-        _               (d/create-database client {:db-name database})
-        conn            (d/connect client {:db-name database})]
+  (let [client (config->client config)
+        _      (d/create-database client {:db-name database})
+        conn   (d/connect client {:db-name database})]
     (ensure-schema! all-attributes config schemas conn)
     (verify-schema! (d/db conn) schema all-attributes)
     (log/info "Finished connecting to and migrating database.")
@@ -213,13 +225,14 @@
 
 (defn start-databases
   "Start all of the databases described in config, using the schemas defined in schemas.
+
   * `config`:  a map that contains the key `do/databases`.
   * `schemas`:  a map whose keys are schema names, and whose values can be missing (or :auto) for
+
   automatic schema generation, a `(fn [schema-name conn] ...)` that updates the schema for schema-name
   on the database reachable via `conn`. You may omit `schemas` if automatic generation is being used
   everywhere.
-  WARNING: Be sure all of your model files are required before running this function, since it
-  will use the attribute definitions during startup.
+
   The `do/databases` entry in the config is a map with the following form:
   ```
   {:production-shard-1 {:datomic/schema :production

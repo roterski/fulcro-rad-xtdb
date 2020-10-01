@@ -20,7 +20,18 @@
     [taoensso.encore :as enc]
     [taoensso.timbre :as log]))
 
-;; FIXME: There should be a client API query that runs on startup to find idents so that this is more efficient and also so we don't use the entity API.
+(defonce ident-cache (atom {}))
+
+(defn dbid->datomic-ident [db dbid]
+  (if-let [cached-ident (get @ident-cache dbid)]
+    cached-ident
+    (if-let [ident (:v (first (d/datoms db :eavt dbid :db/ident)))]
+      (do
+        (swap! ident-cache assoc dbid ident)
+        ident)
+      {:db/id dbid})))
+
+
 (defn replace-ref-types
   "dbc   the database to query
    refs  a set of keywords that ref datomic entities, which you want to access directly
@@ -35,9 +46,9 @@
           (fn [acc ref-k]
             (cond
               (and (get acc ref-k) (not (vector? (get acc ref-k))))
-              (update acc ref-k (comp :db/ident (partial d/entity db) :db/id))
+              (update acc ref-k (comp (partial dbid->datomic-ident db) :db/id))
               (and (get acc ref-k) (vector? (get acc ref-k)))
-              (update acc ref-k #(mapv (comp :db/ident (partial d/entity db) :db/id) %))
+              (update acc ref-k #(mapv (comp (partial dbid->datomic-ident db) :db/id) %))
               :else acc))
           arg
           refs)
@@ -68,7 +79,7 @@
   "Do all of the possible Datomic operations for the given form delta (save to all Datomic databases involved)"
   [env {::form/keys [delta] :as save-params}]
   (let [schemas (common/schemas-for-delta env delta)
-        result (atom {:tempids {}})]
+        result  (atom {:tempids {}})]
     (log/debug "Saving form across " schemas)
     (doseq [schema schemas
             :let [connection (-> env do/connections (get schema))
@@ -80,7 +91,7 @@
       (log/debug "Running txn\n" (with-out-str (pprint txn)))
       (if (and connection (seq txn))
         (try
-          (let [database-atom (get-in env [do/databases schema])
+          (let [database-atom   (get-in env [do/databases schema])
                 {:keys [tempids]} @(d/transact connection txn)
                 tempid->real-id (into {}
                                   (map (fn [tempid] [tempid (get tempid->generated-id tempid
@@ -98,12 +109,12 @@
 (defn delete-entity!
   "Delete the given entity, if possible."
   [{::attr/keys [key->attribute] :as env} params]
-  (enc/if-let [pk (ffirst params)
-               id (get params pk)
-               ident [pk id]
+  (enc/if-let [pk         (ffirst params)
+               id         (get params pk)
+               ident      [pk id]
                {:keys [::attr/schema]} (key->attribute pk)
                connection (-> env do/connections (get schema))
-               txn [[:db/retractEntity ident]]]
+               txn        [[:db/retractEntity ident]]]
     (do
       (log/info "Deleting" ident)
       (let [database-atom (get-in env [do/databases schema])]
@@ -210,16 +221,16 @@
                                               (when-not (every? qualified-keyword? set-of-enumerated-values)
                                                 (throw (IllegalArgumentException.
                                                          (str "set-to-many-enumeration expects a set of keywords that are idents" set-of-enumerated-values))))
-                                              (let [old-val (into #{}
-                                                              (map :db/ident)
-                                                              (get (datomic.api/pull db [{rel [:db/ident]}] eid) rel))
+                                              (let [old-val    (into #{}
+                                                                 (map :db/ident)
+                                                                 (get (datomic.api/pull db [{rel [:db/ident]}] eid) rel))
                                                     to-retract (into []
                                                                  (map (fn [k] [:db/retract eid rel k]))
                                                                  (clojure.set/difference old-val set-of-enumerated-values))
-                                                    eid (or (:db/id (datomic.api/pull db [:db/id] eid)) (str (second eid)))
-                                                    txn (into to-retract
-                                                          (map (fn [k] [:db/add eid rel k]))
-                                                          (clojure.set/difference set-of-enumerated-values old-val))]
+                                                    eid        (or (:db/id (datomic.api/pull db [:db/id] eid)) (str (second eid)))
+                                                    txn        (into to-retract
+                                                                 (map (fn [k] [:db/add eid rel k]))
+                                                                 (clojure.set/difference set-of-enumerated-values old-val))]
                                                 txn))})}
                      {:db/id    (d/tempid :db.part/user)
                       :db/ident :com.fulcrologic.rad.fn/add-ident
@@ -255,7 +266,7 @@
         (log/debug "Checking schema" schema "attribute" qualified-key)
         (let [{:db/keys [cardinality valueType]} (d/pull db '[{:db/cardinality [:db/ident]} {:db/valueType [:db/ident]}] qualified-key)
               cardinality (get cardinality :db/ident :one)
-              db-type (get valueType :db/ident :unknown)]
+              db-type     (get valueType :db/ident :unknown)]
           (when (not= (get type-map type) db-type)
             (log/error qualified-key "for schema" schema "is incorrect in the database. It has type" valueType
               "but was expected to have type" (get type-map type))
@@ -278,12 +289,12 @@
 
   Returns a migrated database connection."
   [all-attributes {:datomic/keys [schema prevent-changes?] :as config} schemas]
-  (let [url (config->url config)
-        generator (get schemas schema :auto)
-        _ (d/create-database url)
-        mock? (boolean (or prevent-changes? (System/getProperty "force.mocked.connection")))
+  (let [url             (config->url config)
+        generator       (get schemas schema :auto)
+        _               (d/create-database url)
+        mock?           (boolean (or prevent-changes? (System/getProperty "force.mocked.connection")))
         real-connection (d/connect url)
-        conn (if mock? (dm/fork-conn real-connection) real-connection)]
+        conn            (if mock? (dm/fork-conn real-connection) real-connection)]
     (when mock?
       (log/warn "==========================================================")
       (log/warn "Database mocking enabled. No database changes will persist!")
@@ -362,14 +373,14 @@
   (let [{::attr/keys [qualified-key]
          ::keys      [native-id?]} id-attribute
         one? (not (sequential? input))]
-    (enc/if-let [db (some-> (get-in env [do/databases schema]) deref)
-                 query (get env ::default-query)
-                 ids (if one?
-                       [(get input qualified-key)]
-                       (into [] (keep #(get % qualified-key) input)))
-                 ids (if native-id?
-                       ids
-                       (mapv (fn [id] [qualified-key id]) ids))
+    (enc/if-let [db           (some-> (get-in env [do/databases schema]) deref)
+                 query        (get env ::default-query)
+                 ids          (if one?
+                                [(get input qualified-key)]
+                                (into [] (keep #(get % qualified-key) input)))
+                 ids          (if native-id?
+                                ids
+                                (mapv (fn [id] [qualified-key id]) ids))
                  enumerations (into #{}
                                 (keep #(when (= :enum (::attr/type %))
                                          (::attr/qualified-key %)))
@@ -391,12 +402,12 @@
    output-attributes]
   [::attr/attributes ::attr/attribute ::attr/attributes => ::pc/resolver]
   (log/info "Building ID resolver for" qualified-key)
-  (enc/if-let [_ id-attribute
-               outputs (attr/attributes->eql output-attributes)
+  (enc/if-let [_          id-attribute
+               outputs    (attr/attributes->eql output-attributes)
                pull-query (common/pathom-query->datomic-query all-attributes outputs)]
-    (let [resolve-sym (symbol
-                        (str (namespace qualified-key))
-                        (str (name qualified-key) "-resolver"))
+    (let [resolve-sym      (symbol
+                             (str (namespace qualified-key))
+                             (str (name qualified-key) "-resolver"))
           with-resolve-sym (fn [r]
                              (fn [env input]
                                (r (assoc env ::pc/sym resolve-sym) input)))]
@@ -427,23 +438,23 @@
   "Generate all of the resolvers that make sense for the given database config. This should be passed
   to your Pathom parser to register resolvers for each of your schemas."
   [attributes schema]
-  (let [attributes (filter #(= schema (::attr/schema %)) attributes)
-        key->attribute (attr/attribute-map attributes)
+  (let [attributes            (filter #(= schema (::attr/schema %)) attributes)
+        key->attribute        (attr/attribute-map attributes)
         entity-id->attributes (group-by ::k (mapcat (fn [attribute]
                                                       (map
                                                         (fn [id-key] (assoc attribute ::k id-key))
                                                         (get attribute ::attr/identities)))
                                               attributes))
-        entity-resolvers (reduce-kv
-                           (fn [result k v]
-                             (enc/if-let [attr (key->attribute k)
-                                          resolver (id-resolver attributes attr v)]
-                               (conj result resolver)
-                               (do
-                                 (log/error "Internal error generating resolver for ID key" k)
-                                 result)))
-                           []
-                           entity-id->attributes)]
+        entity-resolvers      (reduce-kv
+                                (fn [result k v]
+                                  (enc/if-let [attr     (key->attribute k)
+                                               resolver (id-resolver attributes attr v)]
+                                    (conj result resolver)
+                                    (do
+                                      (log/error "Internal error generating resolver for ID key" k)
+                                      result)))
+                                []
+                                entity-id->attributes)]
     entity-resolvers))
 
 (def ^:private pristine-db (atom nil))
@@ -455,9 +466,9 @@
   (locking pristine-db
     (when-not @pristine-db
       (let [db-url (str "datomic:mem://" (gensym "test-database"))
-            _ (log/info "Creating test database" db-url)
-            _ (d/create-database db-url)
-            conn (d/connect db-url)]
+            _      (log/info "Creating test database" db-url)
+            _      (d/create-database db-url)
+            conn   (d/connect db-url)]
         (ensure-transactor-functions! conn)
         (reset! pristine-db (d/db conn))))
     (dm/mock-conn @pristine-db)))
@@ -480,8 +491,8 @@
            (log/debug "Returning cached test db")
            (dm/mock-conn db))
          (let [base-connection (pristine-db-connection)
-               conn (dm/mock-conn (d/db base-connection))
-               txn (if (vector? txn) txn (common/automatic-schema all-attributes schema-name))]
+               conn            (dm/mock-conn (d/db base-connection))
+               txn             (if (vector? txn) txn (common/automatic-schema all-attributes schema-name))]
            (log/debug "Transacting schema: " (with-out-str (pprint txn)))
            @(d/transact conn txn)
            (let [db (d/db conn)]
@@ -523,7 +534,7 @@
   (p/env-wrap-plugin
     (fn [env]
       (let [database-connection-map (database-mapper env)
-            databases (sp/transform [sp/MAP-VALS] (fn [v] (atom (d/db v))) database-connection-map)]
+            databases               (sp/transform [sp/MAP-VALS] (fn [v] (atom (d/db v))) database-connection-map)]
         (assoc env
           do/connections database-connection-map
           do/databases databases)))))
@@ -536,7 +547,7 @@
        save-result)))
   ([handler]
    (fn [{::form/keys [params] :as pathom-env}]
-     (let [save-result (save-form! pathom-env params)
+     (let [save-result    (save-form! pathom-env params)
            handler-result (handler pathom-env)]
        (deep-merge save-result handler-result)))))
 
@@ -544,7 +555,7 @@
   "Form delete middleware to accomplish datomic deletes."
   ([handler]
    (fn [{::form/keys [params] :as pathom-env}]
-     (let [local-result (delete-entity! pathom-env params)
+     (let [local-result   (delete-entity! pathom-env params)
            handler-result (handler pathom-env)]
        (deep-merge handler-result local-result))))
   ([]

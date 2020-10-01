@@ -21,7 +21,7 @@
                        :extra-deps {dev-local-tu             {:mvn/version "0.1.0"}
                                     ; N.B. - follow instuctions for installing dev-local
                                     ; https://docs.datomic.com/cloud/dev-local.html#using
-                                    com.datomic/dev-local    {:mvn/version "0.9.184"}
+                                    com.datomic/dev-local    {:mvn/version "0.9.203"}
                                     com.datomic/client-cloud {:mvn/version "0.8.102"}}}
 
            :provided  {:extra-deps {com.datomic/datomic-free {:mvn/version "0.9.5697"
