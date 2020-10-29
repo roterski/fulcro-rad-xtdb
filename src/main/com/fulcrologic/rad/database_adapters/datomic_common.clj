@@ -19,6 +19,9 @@
    :password :db.type/string
    :int      :db.type/long
    :long     :db.type/long
+   :double   :db.type/double
+   :float    :db.type/float
+   :bigdec   :db.type/bigdec
    :decimal  :db.type/bigdec
    :instant  :db.type/instant
    :keyword  :db.type/keyword
@@ -36,15 +39,15 @@
 (defn- fix-id-keys
   "Fix the ID keys recursively on result."
   [k->a ast-nodes result]
-  (let [id? (fn [{:keys [dispatch-key]}] (some-> dispatch-key k->a ::attr/identity?))
-        id-key (:key (sp/select-first [sp/ALL id?] ast-nodes))
+  (let [id?                (fn [{:keys [dispatch-key]}] (some-> dispatch-key k->a ::attr/identity?))
+        id-key             (:key (sp/select-first [sp/ALL id?] ast-nodes))
         join-key->children (into {}
                              (comp
                                (filter #(= :join (:type %)))
                                (map (fn [{:keys [key children]}] [key children])))
                              ast-nodes)
-        join-keys (set (keys join-key->children))
-        join-key? #(contains? join-keys %)]
+        join-keys          (set (keys join-key->children))
+        join-key?          #(contains? join-keys %)]
     (reduce-kv
       (fn [m k v]
         (cond
@@ -68,9 +71,9 @@
 
 (def keys-in-delta
   (fn keys-in-delta [delta]
-    (let [id-keys (into #{}
-                    (map first)
-                    (keys delta))
+    (let [id-keys  (into #{}
+                     (map first)
+                     (keys delta))
           all-keys (into id-keys
                      (mapcat keys)
                      (vals delta))]
@@ -78,15 +81,15 @@
 
 (defn schemas-for-delta [{::attr/keys [key->attribute]} delta]
   (let [all-keys (keys-in-delta delta)
-        schemas (into #{}
-                  (keep #(-> % key->attribute ::attr/schema))
-                  all-keys)]
+        schemas  (into #{}
+                   (keep #(-> % key->attribute ::attr/schema))
+                   all-keys)]
     schemas))
 
 (defn tempid->intermediate-id [{::attr/keys [key->attribute]} delta]
   (let [tempids (set (sp/select (sp/walker tempid/tempid?) delta))
         fulcro-tempid->real-id
-        (into {} (map (fn [t] [t (str (:id t))]) tempids))]
+                (into {} (map (fn [t] [t (str (:id t))]) tempids))]
     fulcro-tempid->real-id))
 
 (defn native-ident?
@@ -153,11 +156,11 @@
         (reduce
           (fn [tx [k {:keys [before after]}]]
             (if (and (schema-value? env schema k) (not (to-one? env k)))
-              (let [before (into #{} (map (fn [v] (tx-value env k v))) before)
-                    after (into #{} (map (fn [v] (tx-value env k v))) after)
-                    adds (map
-                           (fn [v] [:db/add (failsafe-id env ident) k v])
-                           (set/difference after before))
+              (let [before  (into #{} (map (fn [v] (tx-value env k v))) before)
+                    after   (into #{} (map (fn [v] (tx-value env k v))) after)
+                    adds    (map
+                              (fn [v] [:db/add (failsafe-id env ident) k v])
+                              (set/difference after before))
                     removes (map
                               (fn [v] [:db/retract (failsafe-id env ident) k v])
                               (set/difference before after))]
@@ -189,16 +192,16 @@
 (defn tempids->generated-ids [{::attr/keys [key->attribute] :as env} delta]
   (let [idents (keys delta)
         fulcro-tempid->generated-id
-        (into {} (keep (fn [[k id :as ident]]
-                         (when (and (tempid/tempid? id) (not (native-ident? env ident)))
-                           [id (generate-next-id env k)])) idents))]
+               (into {} (keep (fn [[k id :as ident]]
+                                (when (and (tempid/tempid? id) (not (native-ident? env ident)))
+                                  [id (generate-next-id env k)])) idents))]
     fulcro-tempid->generated-id))
 
 (>defn delta->txn
   [env schema delta]
   [map? keyword? map? => map?]
-  (let [tempid->txid (tempid->intermediate-id env delta)
-        tempid->generated-id (tempids->generated-ids env delta)
+  (let [tempid->txid                 (tempid->intermediate-id env delta)
+        tempid->generated-id         (tempids->generated-ids env delta)
         non-native-id-attributes-txn (keep
                                        (fn [[k id :as ident]]
                                          (when (and (tempid/tempid? id) (uuid-ident? env ident))
@@ -216,8 +219,8 @@
   (mapv
     (fn [{::attr/keys [identity? type qualified-key cardinality] :as a}]
       (let [attribute-schema (do/attribute-schema a)
-            overrides (select-keys-in-ns a "db")
-            datomic-type (get type-map type)]
+            overrides        (select-keys-in-ns a "db")
+            datomic-type     (get type-map type)]
         (when-not datomic-type
           (throw (ex-info (str "No mapping from attribute type to Datomic: " type) {})))
         (merge

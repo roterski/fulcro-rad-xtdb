@@ -189,7 +189,7 @@
      (cond
        (= :auto generator) (let [txn (common/automatic-schema all-attributes schema)]
                              (log/info "Transacting automatic schema.")
-                             (log/debug "Schema:\n" (with-out-str (pprint txn)))
+                             (log/debug "Generated Schema:\n" (with-out-str (pprint txn)))
                              (d/transact conn {:tx-data txn}))
        (ifn? generator) (do
                           (log/info "Running custom schema function.")
