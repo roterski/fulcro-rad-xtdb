@@ -394,7 +394,7 @@
 (>defn id-resolver
   "Generates a resolver from `id-attribute` to the `output-attributes`."
   [all-attributes
-   {::attr/keys [qualified-key] :keys [::attr/schema ::wrap-resolve] :as id-attribute}
+   {::attr/keys [qualified-key] :keys [::attr/schema ::wrap-resolve ::pc/transform] :as id-attribute}
    output-attributes]
   [::attr/attributes ::attr/attribute ::attr/attributes => ::pc/resolver]
   (log/info "Building ID resolver for" qualified-key)
@@ -409,22 +409,23 @@
                                (r (assoc env ::pc/sym resolve-sym) input)))]
       (log/debug "Computed output is" outputs)
       (log/debug "Datomic pull query to derive output is" pull-query)
-      {::pc/sym     resolve-sym
-       ::pc/output  outputs
-       ::pc/batch?  true
-       ::pc/resolve (cond-> (fn [{::attr/keys [key->attribute] :as env} input]
-                              (->> (entity-query
-                                     (assoc env
-                                       ::attr/schema schema
-                                       ::attr/attributes output-attributes
-                                       ::id-attribute id-attribute
-                                       ::default-query pull-query)
-                                     input)
-                                (common/datomic-result->pathom-result key->attribute outputs)
-                                (auth/redact env)))
-                      wrap-resolve (wrap-resolve)
-                      :always (with-resolve-sym))
-       ::pc/input   #{qualified-key}})
+      (cond-> {::pc/sym     resolve-sym
+               ::pc/output  outputs
+               ::pc/batch?  true
+               ::pc/resolve (cond-> (fn [{::attr/keys [key->attribute] :as env} input]
+                                      (->> (entity-query
+                                             (assoc env
+                                               ::attr/schema schema
+                                               ::attr/attributes output-attributes
+                                               ::id-attribute id-attribute
+                                               ::default-query pull-query)
+                                             input)
+                                        (common/datomic-result->pathom-result key->attribute outputs)
+                                        (auth/redact env)))
+                              wrap-resolve (wrap-resolve)
+                              :always (with-resolve-sym))
+               ::pc/input   #{qualified-key}}
+        transform transform))
     (do
       (log/error "Unable to generate id-resolver. "
         "Attribute was missing schema, or could not be found in the attribute registry: " qualified-key)

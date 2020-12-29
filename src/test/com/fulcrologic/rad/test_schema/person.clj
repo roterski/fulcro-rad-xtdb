@@ -3,6 +3,7 @@
     [com.fulcrologic.rad.form :as form]
     [com.fulcrologic.rad.attributes :as attr :refer [defattr]]
     [com.fulcrologic.rad.authorization :as auth]
+    [com.wsscode.pathom.connect :as pc]
     [com.fulcrologic.rad.database-adapters.datomic :as datomic]
     [com.fulcrologic.rad.database-adapters.datomic-options :as do]
     [taoensso.timbre :as log]))
@@ -10,7 +11,11 @@
 (defattr id ::id :long
   {::attr/identity?     true
    do/native-id?        true
-   ::attr/schema        :production})
+   ::attr/schema        :production
+   ::pc/transform (fn [resolver]
+                    (assoc resolver ::transform-succeeded true))
+
+   })
 
 (defattr full-name ::full-name :string
   {::attr/schema     :production

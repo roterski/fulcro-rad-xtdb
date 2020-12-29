@@ -442,3 +442,16 @@
                      ::person/primary-address {::address/id     addr-id
                                                ::address/street "A St"}})))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Attr Options Tests
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(specification "Attribute Options"
+  (let [person-resolver (first (datomic/generate-resolvers person/attributes :production))]
+    (component "defattr applies ::pc/transform to the resolver map"
+      (assertions
+        "person resolver has been transformed by ::pc/transform"
+        (do
+          (log/spy :info person-resolver)
+          (::person/transform-succeeded person-resolver)) => true
+        ))))
