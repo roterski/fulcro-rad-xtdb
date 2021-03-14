@@ -2,13 +2,19 @@
 
  :deps    {edn-query-language/eql     {:mvn/version "1.0.0"}
            com.taoensso/timbre        {:mvn/version "4.10.0"}
-           com.taoensso/encore        {:mvn/version "2.120.0"}
+           com.taoensso/encore        {:mvn/version "3.9.2"}
            com.fulcrologic/guardrails {:mvn/version "0.0.12"}
            com.fulcrologic/fulcro-rad {:mvn/version "1.0.0-RC1"}
            com.wsscode/pathom         {:mvn/version "2.2.31"}
            com.rpl/specter            {:mvn/version "1.1.3"}
-           vvvvalvalval/datomock      {:mvn/version "0.2.2"}
-           org.clojure/clojure        {:mvn/version "1.10.1"}}
+         ;;   vvvvalvalval/datomock      {:mvn/version "0.2.2"}
+           org.clojure/clojure        {:mvn/version "1.10.1"}
+           juxt/crux-core             {:mvn/version "21.02-1.15.0-beta"
+                                       ;; :exclusions [com.taoensso/nippy]
+                                       }
+        ;;    juxt/crux-rocksdb          {:mvn/version "21.02-1.15.0-beta"}
+        ;;    juxt/crux-jdbc             {:mvn/version "21.02-1.15.0-beta"}
+           }
 
  :aliases {:test      {:extra-paths ["src/test"]
                        :extra-deps  {fulcrologic/fulcro-spec {:mvn/version "3.1.6"}}}
@@ -24,8 +30,14 @@
                                     com.datomic/dev-local    {:mvn/version "0.9.195"}
                                     com.datomic/client-cloud {:mvn/version "0.8.102"}}}
 
-           :provided  {:extra-deps {com.datomic/datomic-free {:mvn/version "0.9.5697"
-                                                              :exclusions  [org.slf4j/slf4j-nop]}}}
+           :provided  {:extra-deps {
+                                    ;; com.datomic/datomic-free {:mvn/version "0.9.5697"
+                                    ;;                           :exclusions  [org.slf4j/slf4j-nop]}
+                                    ;; juxt/crux-core           {:mvn/version "21.02-1.15.0-beta"
+                                    ;;                           :exclusions  [org.slf4j/slf4j-api
+                                    ;;                                         org.slf4j/slf4j-nop]
+                                    ;;                           }
+                                    }}
 
            :dev       {:extra-paths ["src/dev" "resources"]
                        :extra-deps  {org.clojure/tools.namespace {:mvn/version "1.0.0"}}}}}
