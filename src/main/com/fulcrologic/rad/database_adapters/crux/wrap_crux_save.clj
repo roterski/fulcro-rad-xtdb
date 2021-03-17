@@ -119,7 +119,7 @@
                    ->delta-update-txs)}))
 
 (defn save-form!
-  "Do all of the possible Datomic operations for the given form delta (save to all Datomic databases involved)"
+  "Do all of the possible Crux operations for the given form delta (save to all Crux databases involved)"
   [env {::form/keys [delta]}]
   (let [schemas (schemas-for-delta env delta)
         result  (atom {:tempids {}})]

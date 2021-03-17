@@ -10,7 +10,7 @@
   :com.fulcrologic.rad.database-adapters.crux/nodes)
 
 (def databases
-  "If using the datomic pathom-plugin, the resulting pathom-env will contain
+  "If using the crux pathom-plugin, the resulting pathom-env will contain
     a map from schema->database at this key path"
   :com.fulcrologic.rad.database-adapters.crux/databases)
 
