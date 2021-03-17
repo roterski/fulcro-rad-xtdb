@@ -1,13 +1,9 @@
 (ns com.fulcrologic.rad.test-schema.thing
   (:require
-    [com.fulcrologic.rad.attributes :as attr :refer [defattr]]
-    [com.fulcrologic.rad.database-adapters.datomic :as datomic]
-    [com.fulcrologic.rad.database-adapters.datomic-options :as do]
-    ))
+   [com.fulcrologic.rad.attributes :as attr :refer [defattr]]))
 
 (defattr id ::id :long
   {::attr/identity?     true
-   do/native-id?        true
    ::attr/schema        :production})
 
 (defattr label ::label :string

@@ -38,37 +38,26 @@
 (defn ref? [{::attr/keys [key->attribute]} k]
   (= :ref (some-> k key->attribute ::attr/type)))
 
-(defn native-ident?
-  "Returns true if the given ident is using a database native ID (:db/id)"
-  [{::attr/keys [key->attribute] :as env} ident]
-  (boolean (some-> ident first key->attribute co/native-id?)))
-
 (defn next-uuid [] (UUID/randomUUID))
 
 (defn generate-next-id
   "Generate an id. You may pass a `suggested-id` as a UUID or a tempid. If it is a tempid and the ID column is a UUID, then
-  the UUID *from* the tempid will be used. If the ID column is not a UUID then the suggested id is ignored. Returns nil for
-  native ID columns."
+  the UUID *from* the tempid will be used. If the ID column is not a UUID then the suggested id is ignored."
   ([{::attr/keys [key->attribute] :as env} k]
    (generate-next-id env k (next-uuid)))
   ([{::attr/keys [key->attribute] :as env} k suggested-id]
-   (let [{native-id?  :com.fulcrologic.rad.database-adapters.datomic/native-id?
-          ::attr/keys [type]} (key->attribute k)]
+   (let [{::attr/keys [type]} (key->attribute k)]
      (cond
-       native-id? nil
-       (= :uuid type) (cond
-                        (tempid/tempid? suggested-id) (:id suggested-id)
-                        (uuid? suggested-id) suggested-id
-                        :else (next-uuid))
-       :else (throw (ex-info "Cannot generate an ID for non-native ID attribute" {:attribute k}))))))
+       (tempid/tempid? suggested-id) (:id suggested-id)
+       (uuid? suggested-id) suggested-id
+       :else (next-uuid)))))
 
 (defn tempids->generated-ids [env delta]
-  (let [idents (keys delta)
-        fulcro-tempid->generated-id
-        (into {} (keep (fn [[k id :as ident]]
-                         (when (and (tempid/tempid? id) (not (native-ident? env ident)))
-                           [id (generate-next-id env k)])) idents))]
-    fulcro-tempid->generated-id))
+  (->> (keys delta)
+       (keep (fn [[k id]]
+               (when (tempid/tempid? id)
+                 [id (generate-next-id env k)])))
+       (into {})))
 
 (defn ->delta-update-txs
   [doc-delta]

@@ -36,9 +36,9 @@
 
 (>defn pathom-query->crux-query [all-attributes pathom-query]
        [::attr/attributes ::eql/query => ::eql/query]
-       (let [native-id? #(and (true? (co/native-id? %)) (true? (::attr/identity? %)))
-             native-ids (set (sp/select [sp/ALL native-id? ::attr/qualified-key] all-attributes))]
-         (sp/transform (sp/walker keyword?) (fn [k] (if (contains? native-ids k) :crux.db/id k)) pathom-query)))
+       (let [identity? #(true? (::attr/identity? %))
+             identities (set (sp/select [sp/ALL identity? ::attr/qualified-key] all-attributes))]
+         (sp/transform (sp/walker keyword?) (fn [k] (if (contains? identities k) :crux.db/id k)) pathom-query)))
 
 (>defn crux-result->pathom-result
        "Convert a crux result containing :crux.db/id into a pathom result containing the proper id keyword that was used
@@ -69,17 +69,14 @@
   [{:keys       [::attr/schema ::id-attribute]
     ::attr/keys [attributes]
     :as         env} input]
-  (let [{::attr/keys [qualified-key]
-         ::keys      [native-id?]} id-attribute
+  (let [{::attr/keys [qualified-key]} id-attribute
         one? (not (sequential? input))]
     (enc/if-let [db           (some-> (get-in env [co/databases schema]) deref)
                  query        (get env ::default-query)
                  ids          (if one?
                                 [(get input qualified-key)]
                                 (into [] (keep #(get % qualified-key) input)))
-                 ids          (if native-id?
-                                ids
-                                (mapv (fn [id] [qualified-key id]) ids))
+                 ids          (mapv (fn [id] [qualified-key id]) ids)
                  enumerations (into #{}
                                     (keep #(when (= :enum (::attr/type %))
                                              (::attr/qualified-key %)))
