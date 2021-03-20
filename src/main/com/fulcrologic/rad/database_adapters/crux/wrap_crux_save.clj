@@ -14,8 +14,14 @@
 (def transaction-functions
   {::delta-update '(fn [ctx [id {:keys [before after]}]]
                      (let [db (crux.api/db ctx)
-                           entity (crux.api/entity db id)]
-                       [[:crux.tx/match id (some-> entity (merge before))]
+                           entity (crux.api/entity db id)
+                           before (when entity
+                                    (reduce (fn [e [k v]]
+                                              (cond-> e
+                                                (and v (get e k)) (assoc k v)))
+                                            entity
+                                            before))]
+                       [[:crux.tx/match id before]
                         [:crux.tx/put (merge entity after)]]))})
 
 (def keys-in-delta
@@ -136,6 +142,8 @@
                 tx (c/submit-tx node txn)]
             (swap! result update :tempids merge tempid->generated-id)
             (c/await-tx node tx)
+            (when-not (c/tx-committed? node tx)
+              (log/error "Transaction failed!"))
             (when database-atom
               (reset! database-atom (c/db node))))
           (catch Exception e
