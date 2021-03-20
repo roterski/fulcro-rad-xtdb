@@ -6,7 +6,7 @@
    [com.wsscode.pathom.core :as p]))
 
 (defn pathom-plugin
-  "A pathom plugin that adds the necessary Datomic connections and databases to the pathom env for
+  "A pathom plugin that adds the necessary Crux nodes and databases to the pathom env for
   a given request. Requires a database-mapper, which is a
   `(fn [pathom-env] {schema-name connection})` for a given request.
 
