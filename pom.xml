@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.clojars.roterski</groupId>
   <artifactId>fulcro-rad-crux</artifactId>
-  <version>0.1.0</version>
+  <version>0.0.1-alpha-1</version>
   <name>fulcro-rad-crux</name>
   <dependencies>
     <dependency>
