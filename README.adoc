@@ -8,12 +8,12 @@ This repo is a fork of https://github.com/fulcrologic/fulcro-rad-datomic adapted
 
 There is an example application https://github.com/fulcrologic/fulcro-rad-demo[fulcrologic/fulcro-rad-demo] that can be referenced for how to properly configure this plugin.
 
-`crux-adapter/start-databases` expects a map with `:com.fulcrologic.rad.database-adapters.crux/databases` key that contains configuration maps for each defined database.
+`crux-adapter/start-databases` expects a map with `:roterski.fulcro.rad.database-adapters.crux/databases` key that contains configuration maps for each defined database.
  Configuration maps are then passed directly to `crux.api/start-node` so please refer to https://opencrux.com/reference/21.02-1.15.0/configuration.html[Crux documentation] for available options.
 
 [source, clojure]
 -----
-:com.fulcrologic.rad.database-adapters.crux/databases
+:roterski.fulcro.rad.database-adapters.crux/databases
     {:main {:crux.jdbc/connection-pool {:dialect #:crux{:module "crux.jdbc.psql/->dialect"}
                                         :db-spec {:dbname   "fulcro-rad-demo"
                                                              :user     "postgres"
@@ -28,7 +28,7 @@ Because Crux expects module names to be symbols, there's a convenience function 
 
 [source, clojure]
 -----
-(require '[com.fulcrologic.rad.database-adapters.crux :as crux])
+(require '[roterski.fulcro.rad.database-adapters.crux :as crux])
 
 (crux/start-databases (crux/symbolize-crux-modules config))
 -----

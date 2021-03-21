@@ -1,8 +1,8 @@
-(ns com.fulcrologic.rad.database-adapters.crux.start-databases
+(ns roterski.fulcro.rad.database-adapters.crux.start-databases
   (:require
    [crux.api :as crux]
-   [com.fulcrologic.rad.database-adapters.crux-options :as co]
-   [com.fulcrologic.rad.database-adapters.crux.wrap-crux-save :as wcs]
+   [roterski.fulcro.rad.database-adapters.crux-options :as co]
+   [roterski.fulcro.rad.database-adapters.crux.wrap-crux-save :as wcs]
    [taoensso.timbre :as log]))
 
 (defn transaction-functions->txs [t-fns]
@@ -53,7 +53,7 @@
   NOTE: crux expects the value under :crux/module key to be a symbol so if you want store the config in edn file, you can
   use strings for :crux/module values and pass the config through symbolize-crux-modules before calling start-databases:
   ```
-  (require '[com.fulcrologic.rad.database-adapters.crux :as crux])
+  (require '[roterski.fulcro.rad.database-adapters.crux :as crux])
   (crux/start-databases (crux/symbolize-crux-modules config))
   ```
 

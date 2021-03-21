@@ -1,4 +1,4 @@
-(ns com.fulcrologic.rad.database-adapters.crux-options)
+(ns roterski.fulcro.rad.database-adapters.crux-options)
 
 ;; Attribute options
 
@@ -7,12 +7,12 @@
 (def nodes
   "If using the crux pathom-plugin, the resulting pathom-env will contain
     a map from schema->node at this key path"
-  :com.fulcrologic.rad.database-adapters.crux/nodes)
+  :roterski.fulcro.rad.database-adapters.crux/nodes)
 
 (def databases
   "If using the crux pathom-plugin, the resulting pathom-env will contain
     a map from schema->database at this key path"
-  :com.fulcrologic.rad.database-adapters.crux/databases)
+  :roterski.fulcro.rad.database-adapters.crux/databases)
 
 (def transaction-functions
   "A way to a add custom transaction functions to each crux node.
@@ -25,4 +25,4 @@
                        [[:crux.tx/match id (some-> entity (merge before))]
                         [:crux.tx/put (merge entity after)]]))}
    ```"
-  :com.fulcrologic.rad.database-adapters.crux/transaction-functions)
+  :roterski.fulcro.rad.database-adapters.crux/transaction-functions)

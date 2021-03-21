@@ -1,9 +1,9 @@
-(ns com.fulcrologic.rad.database-adapters.crux.generate-resolvers
+(ns roterski.fulcro.rad.database-adapters.crux.generate-resolvers
   (:require
    [com.fulcrologic.guardrails.core :refer [>defn => ?]]
    [com.fulcrologic.rad.attributes :as attr]
    [com.fulcrologic.rad.authorization :as auth]
-   [com.fulcrologic.rad.database-adapters.crux-options :as co]
+   [roterski.fulcro.rad.database-adapters.crux-options :as co]
    [com.rpl.specter :as sp]
    [com.wsscode.pathom.connect :as pc]
    [crux.api :as crux]

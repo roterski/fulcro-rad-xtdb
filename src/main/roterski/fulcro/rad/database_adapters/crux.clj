@@ -1,10 +1,10 @@
-(ns com.fulcrologic.rad.database-adapters.crux
+(ns roterski.fulcro.rad.database-adapters.crux
   (:require
-   [com.fulcrologic.rad.database-adapters.crux.start-databases :as sd]
-   [com.fulcrologic.rad.database-adapters.crux.pathom-plugin :as pp]
-   [com.fulcrologic.rad.database-adapters.crux.generate-resolvers :as gr]
-   [com.fulcrologic.rad.database-adapters.crux.wrap-crux-save :as wcs]
-   [com.fulcrologic.rad.database-adapters.crux.wrap-crux-delete :as wcd]
+   [roterski.fulcro.rad.database-adapters.crux.start-databases :as sd]
+   [roterski.fulcro.rad.database-adapters.crux.pathom-plugin :as pp]
+   [roterski.fulcro.rad.database-adapters.crux.generate-resolvers :as gr]
+   [roterski.fulcro.rad.database-adapters.crux.wrap-crux-save :as wcs]
+   [roterski.fulcro.rad.database-adapters.crux.wrap-crux-delete :as wcd]
    [clojure.walk :as walk]))
 
 (defn symbolize-crux-modules [config]
