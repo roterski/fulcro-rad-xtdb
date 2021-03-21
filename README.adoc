@@ -6,12 +6,12 @@ This repo bases on https://github.com/fulcrologic/fulcro-rad-datomic[fulcrologic
 
 == Status
 
-It's a very first alpha iteration - it passes integration test and seems to be working properly with https://github.com/fulcrologic/fulcro-rad-demo[fulcrologic/fulcro-rad-demo] but has not been tested outside of it yet.
+It's a very first alpha iteration - it passes integration test and seems to be working properly with https://github.com/roterski/fulcro-rad-demo[roterski/fulcro-rad-demo] but has not been tested outside of it yet.
 
 
 == Configuration
 
-There is an example application https://github.com/fulcrologic/fulcro-rad-demo[fulcrologic/fulcro-rad-demo] that can be referenced for how to properly configure this plugin.
+There is an example application https://github.com/roterski/fulcro-rad-demo[roterski/fulcro-rad-demo] that can be referenced for how to properly configure this plugin.
 
 `crux-adapter/start-databases` expects a map with `:roterski.fulcro.rad.database-adapters.crux/databases` key that contains configuration maps for each defined database.
  Configuration maps are then passed directly to `crux.api/start-node` so please refer to https://opencrux.com/reference/21.02-1.15.0/configuration.html[Crux documentation] for available options.
