@@ -2,7 +2,12 @@
 
 This is a plugin for Fulcro RAD that adds support for using Crux databases as the back-end technology.
 
-This repo is a fork of https://github.com/fulcrologic/fulcro-rad-datomic adapted to Crux api with some Datomic specific features dropped (e.g. schemas and Datomic Cloud support).
+This repo bases on https://github.com/fulcrologic/fulcro-rad-datomic[fulcrologic/fulcro-rad-datomic] adapted to Crux api with some Datomic specific features dropped (e.g. schemas and Datomic Cloud support).
+
+== Status
+
+It's a very first alpha iteration - it passes integration test and seems to be working properly with https://github.com/fulcrologic/fulcro-rad-demo[fulcrologic/fulcro-rad-demo] but has not been tested outside of it yet.
+
 
 == Configuration
 
