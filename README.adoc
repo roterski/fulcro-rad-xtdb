@@ -1,6 +1,6 @@
 = Crux Database Plugin
 
-image:https://img.shields.io/clojars/v/net.clojars.roterski/fulcro-rad-crux.svg[link=https://clojars.org/net.clojars.roterski/fulcro-rad-crux]
+image:https://img.shields.io/clojars/v/roterski/fulcro-rad-crux.svg[link=https://clojars.org/roterski/fulcro-rad-crux]
 
 This is a plugin for Fulcro RAD that adds support for using https://opencrux.com/[Crux] databases as the back-end technology.
 
