@@ -1,7 +1,7 @@
-(ns com.fulcrologic.rad.database-adapters.crux.pathom-plugin
+(ns roterski.fulcro.rad.database-adapters.crux.pathom-plugin
   (:require
    [crux.api :as c]
-   [com.fulcrologic.rad.database-adapters.crux-options :as co]
+   [roterski.fulcro.rad.database-adapters.crux-options :as co]
    [com.rpl.specter :as sp]
    [com.wsscode.pathom.core :as p]))
 

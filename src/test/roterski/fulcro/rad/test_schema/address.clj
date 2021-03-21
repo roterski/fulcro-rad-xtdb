@@ -1,4 +1,4 @@
-(ns com.fulcrologic.rad.test-schema.address
+(ns roterski.fulcro.rad.test-schema.address
   (:require
     [com.fulcrologic.rad.attributes :as attr :refer [defattr]]))
 

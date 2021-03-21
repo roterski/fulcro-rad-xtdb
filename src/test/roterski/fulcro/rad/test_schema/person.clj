@@ -1,4 +1,4 @@
-(ns com.fulcrologic.rad.test-schema.person
+(ns roterski.fulcro.rad.test-schema.person
   (:require
     [com.fulcrologic.rad.attributes :as attr :refer [defattr]]
     [com.wsscode.pathom.connect :as pc]))
@@ -32,18 +32,18 @@
    ::attr/required?  true})
 
 (defattr primary-address ::primary-address :ref
-  {::attr/target     :com.fulcrologic.rad.test-schema.address/id
+  {::attr/target     :roterski.fulcro.rad.test-schema.address/id
    ::attr/schema     :production
    ::attr/identities #{::id}})
 
 (defattr addresses ::addresses :ref
-  {::attr/target      :com.fulcrologic.rad.test-schema.address/id
+  {::attr/target      :roterski.fulcro.rad.test-schema.address/id
    ::attr/cardinality :many
    ::attr/schema      :production
    ::attr/identities  #{::id}})
 
 (defattr things ::things :ref
-  {::attr/target      :com.fulcrologic.rad.test-schema.thing/id
+  {::attr/target      :roterski.fulcro.rad.test-schema.thing/id
    ::attr/cardinality :many
    ::attr/schema      :production
    ::attr/identities  #{::id}})

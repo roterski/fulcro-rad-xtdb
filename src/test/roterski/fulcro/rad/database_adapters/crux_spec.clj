@@ -1,15 +1,15 @@
-(ns com.fulcrologic.rad.database-adapters.crux-spec
+(ns roterski.fulcro.rad.database-adapters.crux-spec
   (:require
    [fulcro-spec.core :refer [specification assertions component behavior when-mocking]]
    [com.fulcrologic.rad.ids :as ids]
    [com.fulcrologic.rad.form :as form]
-   [com.fulcrologic.rad.test-schema.person :as person]
-   [com.fulcrologic.rad.test-schema.address :as address]
-   [com.fulcrologic.rad.test-schema.thing :as thing]
+   [roterski.fulcro.rad.test-schema.person :as person]
+   [roterski.fulcro.rad.test-schema.address :as address]
+   [roterski.fulcro.rad.test-schema.thing :as thing]
    [com.fulcrologic.rad.attributes :as attr]
-   [com.fulcrologic.rad.database-adapters.crux.wrap-crux-save :as wcs]
-   [com.fulcrologic.rad.database-adapters.crux :as crux-adapter]
-   [com.fulcrologic.rad.database-adapters.crux-options :as co]
+   [roterski.fulcro.rad.database-adapters.crux.wrap-crux-save :as wcs]
+   [roterski.fulcro.rad.database-adapters.crux :as crux-adapter]
+   [roterski.fulcro.rad.database-adapters.crux-options :as co]
    [crux.api :as crux]
    [clojure.test :refer [use-fixtures]]
    [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
@@ -43,7 +43,7 @@
                      delta {[::person/id tempid1]           {::person/id              tempid1
                                                              ::person/full-name       {:after "Bob"}
                                                              ::person/primary-address {:after [::address/id (ids/new-uuid 1)]}
-                                                             ::person/role            :com.fulcrologic.rad.test-schema.person.role/admin}
+                                                             ::person/role            :roterski.fulcro.rad.test-schema.person.role/admin}
                             [::address/id (ids/new-uuid 1)] {::address/street {:before "A St" :after "A1 St"}}}]
                  (let [{:keys [tempids]} (wcs/save-form! *env* {::form/delta delta})
                        real-id (get tempids tempid1)
@@ -111,7 +111,7 @@
                                   temp-address-id (tempid/tempid)
                                   delta {[::person/id temp-person-id]
                                          {::person/id              {:after temp-person-id}
-                                          ::person/role            {:after :com.fulcrologic.rad.test-schema.person.role/admin}
+                                          ::person/role            {:after :roterski.fulcro.rad.test-schema.person.role/admin}
                                           ::person/primary-address {:after [::address/id temp-address-id]}}
 
                                          [::address/id temp-address-id]
@@ -129,7 +129,7 @@
                               (assertions
                                "Returns the newly-created graph"
                                entity => {::person/id              person-id
-                                          ::person/role            :com.fulcrologic.rad.test-schema.person.role/admin
+                                          ::person/role            :roterski.fulcro.rad.test-schema.person.role/admin
                                           ::person/primary-address {::address/id     addr-id
                                                                     ::address/street "A St"}})))))
 

@@ -1,4 +1,4 @@
-(ns com.fulcrologic.rad.test-schema.thing
+(ns roterski.fulcro.rad.test-schema.thing
   (:require
    [com.fulcrologic.rad.attributes :as attr :refer [defattr]]))
 
