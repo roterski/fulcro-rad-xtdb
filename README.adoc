@@ -1,5 +1,7 @@
 = Crux Database Plugin
 
+image:https://img.shields.io/clojars/v/net.clojars.roterski/fulcro-rad-crux.svg[link=https://clojars.org/net.clojars.roterski/fulcro-rad-crux]
+
 This is a plugin for Fulcro RAD that adds support for using https://opencrux.com/[Crux] databases as the back-end technology.
 
 This repo bases on https://github.com/fulcrologic/fulcro-rad-datomic[fulcrologic/fulcro-rad-datomic] adapted to Crux api with some Datomic specific features dropped (e.g. schemas and Datomic Cloud support).

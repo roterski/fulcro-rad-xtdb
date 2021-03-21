@@ -10,6 +10,9 @@
 .nrepl*
 .nrepl-port
 .repl
+.m2
+.calva
+.lsp
 checkouts
 classes
 compiled
