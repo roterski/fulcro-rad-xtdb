@@ -3,8 +3,65 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>net.clojars.roterski</groupId>
   <artifactId>fulcro-rad-crux</artifactId>
+  <packaging>jar</packaging>
   <version>0.0.1-alpha-1</version>
-  <name>fulcro-rad-crux</name>
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <maven.compiler.target>1.8</maven.compiler.target>
+  </properties>
+  <name>Fulcro RAD Crux</name>
+  <description>A Crux database driver for Fulcro RAD.</description>
+  <url>https://github.com/roterski/fulcro-rad-crux</url>
+  <licenses>
+    <license>
+      <name>MIT</name>
+      <url>https://opensource.org/licenses/MIT</url>
+    </license>
+  </licenses>
+  <scm>
+    <url>https://github.com/roterski/fulcro-rad-crux</url>
+    <connection>scm:git:git://github.com/roterski/fulcro-rad-crux.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/roterski/fulcro-rad-crux.git</developerConnection>
+    <tag></tag>
+  </scm>
+  <distributionManagement>
+    <repository>
+      <id>clojars</id>
+      <name>Clojars repository</name>
+      <url>https://clojars.org/repo</url>
+    </repository>
+  </distributionManagement>
+  <build>
+    <sourceDirectory>src/main</sourceDirectory>
+    <resources>
+      <resource>
+        <directory>src/main</directory>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-gpg-plugin</artifactId>
+        <version>1.6</version>
+        <executions>
+          <execution>
+            <id>sign-artifacts</id>
+            <phase>verify</phase>
+            <goals>
+              <goal>sign</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+  <repositories>
+    <repository>
+      <id>clojars</id>
+      <url>https://repo.clojars.org/</url>
+    </repository>
+  </repositories>
   <dependencies>
     <dependency>
       <groupId>org.clojure</groupId>
@@ -52,8 +109,4 @@
       <version>21.02-1.15.0-beta</version>
     </dependency>
   </dependencies>
-  <build>
-    <sourceDirectory>src/main</sourceDirectory>
-  </build>
-  <repositories/>
 </project>
