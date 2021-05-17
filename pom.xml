@@ -4,7 +4,7 @@
   <groupId>roterski</groupId>
   <artifactId>fulcro-rad-crux</artifactId>
   <packaging>jar</packaging>
-  <version>0.0.1-alpha-1</version>
+  <version>0.0.1-alpha-2</version>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.source>1.8</maven.compiler.source>
@@ -23,7 +23,7 @@
     <url>https://github.com/roterski/fulcro-rad-crux</url>
     <connection>scm:git:git://github.com/roterski/fulcro-rad-crux.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/roterski/fulcro-rad-crux.git</developerConnection>
-    <tag></tag>
+    <tag/>
   </scm>
   <distributionManagement>
     <repository>
@@ -90,7 +90,7 @@
     <dependency>
       <groupId>juxt</groupId>
       <artifactId>crux-core</artifactId>
-      <version>21.02-1.15.0-beta</version>
+      <version>21.04-1.16.0-beta</version>
     </dependency>
   </dependencies>
 </project>
