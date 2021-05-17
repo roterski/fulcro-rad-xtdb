@@ -48,7 +48,7 @@
                  (let [{:keys [tempids]} (wcs/save-form! *env* {::form/delta delta})
                        real-id (get tempids tempid1)
                        person (-> (crux/db *node*)
-                                  (crux/q '{:find [(eql/project ?uid [::person/full-name {::person/primary-address [::address/street]}])]
+                                  (crux/q '{:find [(pull ?uid [::person/full-name {::person/primary-address [::address/street]}])]
                                             :in [id]
                                             :where [[?uid :crux.db/id id]]}
                                           real-id)

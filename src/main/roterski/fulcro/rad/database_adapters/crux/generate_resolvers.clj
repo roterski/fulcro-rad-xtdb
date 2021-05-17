@@ -56,7 +56,7 @@
   [db idents _db-idents desired-output]
   (let [attr (ffirst idents)
         ids (mapv second idents)
-        query {:find ['?uuid `(~'eql/project ~'?account ~desired-output)]
+        query {:find ['?uuid `(~'pull ~'?account ~desired-output)]
                :in '[[?uuid ...]]
                :where [['?account :crux.db/id '?uuid]]}
         id->value (->> (crux/q db query ids)
