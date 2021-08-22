@@ -18,7 +18,7 @@
                            before (when entity
                                     (reduce (fn [e [k v]]
                                               (cond-> e
-                                                (and v (get e k)) (assoc k v)))
+                                                (and (some? v) (get e k)) (assoc k v)))
                                             entity
                                             before))]
                        [[:crux.tx/match id before]
