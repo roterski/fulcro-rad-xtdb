@@ -4,7 +4,7 @@
   <groupId>roterski</groupId>
   <artifactId>fulcro-rad-crux</artifactId>
   <packaging>jar</packaging>
-  <version>0.0.1-alpha-3</version>
+  <version>0.0.1-alpha-4</version>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.source>1.8</maven.compiler.source>
