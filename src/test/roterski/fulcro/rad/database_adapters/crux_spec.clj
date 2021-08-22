@@ -37,29 +37,63 @@
 (use-fixtures :each with-env)
 
 (specification "save-form!"
-               (let [tx (crux/submit-tx *node* [[:crux.tx/put {:crux.db/id (ids/new-uuid 1) ::address/id (ids/new-uuid 1) ::address/street "A St"}]])
-                     _ (crux/await-tx *node* tx)
+               (let [_ (->> [[:crux.tx/put {:crux.db/id (ids/new-uuid 1) ::address/id (ids/new-uuid 1) ::address/street "A St"}]]
+                            (crux/submit-tx *node*)
+                            (crux/await-tx *node*))
                      tempid1 (tempid/tempid (ids/new-uuid 100))
                      delta {[::person/id tempid1]           {::person/id              tempid1
                                                              ::person/full-name       {:after "Bob"}
                                                              ::person/primary-address {:after [::address/id (ids/new-uuid 1)]}
                                                              ::person/role            :roterski.fulcro.rad.test-schema.person.role/admin}
-                            [::address/id (ids/new-uuid 1)] {::address/street {:before "A St" :after "A1 St"}}}]
-                 (let [{:keys [tempids]} (wcs/save-form! *env* {::form/delta delta})
-                       real-id (get tempids tempid1)
-                       person (-> (crux/db *node*)
-                                  (crux/q '{:find [(pull ?uid [::person/full-name {::person/primary-address [::address/street]}])]
-                                            :in [id]
-                                            :where [[?uid :crux.db/id id]]}
-                                          real-id)
-                                  ffirst)
-                       ]
-                   (assertions
-                    "Gives a proper remapping"
-                    (uuid? (get tempids tempid1)) => true
-                    "Updates the db"
-                    person => {::person/full-name       "Bob"
-                               ::person/primary-address {::address/street "A1 St"}}))))
+                            [::address/id (ids/new-uuid 1)] {::address/street {:before "A St" :after "A1 St"}}}
+                     {:keys [tempids]} (wcs/save-form! *env* {::form/delta delta})
+                     real-id (get tempids tempid1)]
+                 (assertions
+                  "Gives a proper remapping"
+                  (uuid? (get tempids tempid1)) => true
+                  "updates the existing doc"
+                  (-> (crux/db *node*)
+                      (crux/q '{:find [(pull ?uid [::address/street])]
+                                :in [id]
+                                :where [[?uid :crux.db/id id]]}
+                              (ids/new-uuid 1))
+                      ffirst) => {::address/street "A1 St"}
+                  "creates a new doc"
+                  (-> (crux/db *node*)
+
+                      (crux/q '{:find [(pull ?uid [::person/full-name {::person/primary-address [::address/street]}])]
+                                :in [id]
+                                :where [[?uid :crux.db/id id]]}
+                              real-id)
+
+                      ffirst) => {::person/full-name       "Bob"
+                                  ::person/primary-address {::address/street "A1 St"}})))
+
+
+(specification "save-form! when there's a 'before' data mismatch"
+               (let [_ (->> [[:crux.tx/put {:crux.db/id (ids/new-uuid 1) ::address/enabled? true ::address/id (ids/new-uuid 1) ::address/street "A St"}]]
+                            (crux/submit-tx *node*)
+                            (crux/await-tx *node*))
+                     tempid1 (tempid/tempid (ids/new-uuid 100))
+                     delta {[::person/id tempid1]           {::person/id              tempid1
+                                                             ::person/full-name       {:after "Bob"}
+                                                             ::person/primary-address {:after [::address/id (ids/new-uuid 1)]}}
+                            [::address/id (ids/new-uuid 1)] {::address/street {:before "A St" :after "A1 St"}
+                                                             ::address/enabled? {:before false :after true}}}
+                     _ (wcs/save-form! *env* {::form/delta delta})]
+                 (assertions
+                  "does not update the existing doc"
+                  (-> (crux/db *node*)
+                      (crux/q '{:find [(pull ?uid [::address/street])]
+                                :in [id]
+                                :where [[?uid :crux.db/id id]]}
+                              (ids/new-uuid 1))
+                      ffirst) => {::address/street "A St"}
+                  "does not create a new doc"
+                  (-> (crux/db *node*)
+                      (crux/q '{:find [(pull ?uid [::person/full-name])]
+                                :where [[?uid ::person/full-name _]]})
+                      ffirst) => nil)))
 
 ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; ;; Round-trip tests
@@ -145,3 +179,8 @@
                              (do
                                (log/spy :info person-resolver)
                                (::person/transform-succeeded person-resolver)) => true))))
+
+(comment
+  (require 'fulcro-spec.reporters.repl)
+  (fulcro-spec.reporters.repl/run-tests)
+  )
