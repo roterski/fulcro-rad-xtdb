@@ -20,9 +20,9 @@
    See https://opencrux.com/reference/21.02-1.15.0/transactions.html#transaction-functions
    ```
    {::example-fn '(fn [ctx [id {:keys [before after]}]]
-                     (let [db (crux.api/db ctx)
-                           entity (crux.api/entity db id)]
-                       [[:crux.tx/match id (some-> entity (merge before))]
-                        [:crux.tx/put (merge entity after)]]))}
+                     (let [db (xtdb.api/db ctx)
+                           entity (xtdb.api/entity db id)]
+                       [[:xtdb.api/match id (some-> entity (merge before))]
+                        [:xtdb.api/put (merge entity after)]]))}
    ```"
   :roterski.fulcro.rad.database-adapters.crux/transaction-functions)

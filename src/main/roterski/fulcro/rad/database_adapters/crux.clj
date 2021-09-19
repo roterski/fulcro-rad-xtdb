@@ -7,10 +7,10 @@
    [roterski.fulcro.rad.database-adapters.crux.wrap-crux-delete :as wcd]
    [clojure.walk :as walk]))
 
-(defn symbolize-crux-modules [config]
+(defn symbolize-xtdb-modules [config]
   (walk/postwalk
    #(cond-> %
-      (and (map? %) (contains? % :crux/module)) (update :crux/module symbol))
+      (and (map? %) (contains? % :xtdb/module)) (update :xtdb/module symbol))
    config))
 
 (def start-databases sd/start-databases)

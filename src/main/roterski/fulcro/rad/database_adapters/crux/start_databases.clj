@@ -1,6 +1,6 @@
 (ns roterski.fulcro.rad.database-adapters.crux.start-databases
   (:require
-   [crux.api :as crux]
+   [xtdb.api :as xt]
    [roterski.fulcro.rad.database-adapters.crux-options :as co]
    [roterski.fulcro.rad.database-adapters.crux.wrap-crux-save :as wcs]
    [taoensso.timbre :as log]))
@@ -8,24 +8,24 @@
 (defn transaction-functions->txs [t-fns]
   (->> t-fns
        (reduce (fn [txs [fn-id fn-body]]
-                 (conj txs [:crux.tx/put {:crux.db/id fn-id
-                                          :crux.db/fn fn-body}]))
+                 (conj txs [::xt/put {:xt/id fn-id
+                                      :xt/fn fn-body}]))
                [])))
 
 (defn start-database!
   "Starts a Crux database node given the standard sub-element config described
   in `start-databases`. Typically use that function instead of this one.
 
-  * `:config` a crux config map passed directly to crux.api/start-node.
+  * `:config` a crux config map passed directly to xtdb.api/start-node.
   See the documentation https://opencrux.com/reference/21.02-1.15.0/configuration.html
 
   Returns a migrated database connection."
   [config opts]
   (let [transaction-functions (merge wcs/transaction-functions (co/transaction-functions opts))
-        node (crux/start-node config)]
+        node (xt/start-node config)]
     (when transaction-functions
       (log/info "Adding transaction functions: " (keys transaction-functions))
-      (crux/submit-tx node (transaction-functions->txs transaction-functions))) ;; todo merge with config supplied functions
+      (xt/submit-tx node (transaction-functions->txs transaction-functions))) ;; todo merge with config supplied functions
     (log/info "Schema management disabled.")
     (log/info "Finished connecting to crux database.")
     node))
@@ -42,19 +42,19 @@
                                                    :db-spec {:dbname   \"fulcro-rad-demo\"
                                                              :user     \"postgres\"
                                                              :password \"postgres\"}}
-                       :crux/tx-log               {:crux/module \"crux.jdbc/->tx-log\"
+                       :xtdb/tx-log               {:xtdb/module \"crux.jdbc/->tx-log\"
                                                    :connection-pool :crux.jdbc/connection-pool}
-                       :crux/document-store       {:crux/module \"crux.jdbc/->document-store\"
+                       :xtdb/document-store       {:xtdb/module \"crux.jdbc/->document-store\"
                                                    :connection-pool :crux.jdbc/connection-pool}}}
   ```
-  where the key (i.e. `:production-shard-1`) is a database name and the value is a crux config map passed directly to crux.api/start-node.
+  where the key (i.e. `:production-shard-1`) is a database name and the value is a crux config map passed directly to xtdb.api/start-node.
   See the documentation https://opencrux.com/reference/21.02-1.15.0/configuration.html
 
-  NOTE: crux expects the value under :crux/module key to be a symbol so if you want store the config in edn file, you can
-  use strings for :crux/module values and pass the config through symbolize-crux-modules before calling start-databases:
+  NOTE: crux expects the value under :xtdb/module key to be a symbol so if you want store the config in edn file, you can
+  use strings for :xtdb/module values and pass the config through symbolize-xtdb-modules before calling start-databases:
   ```
   (require '[roterski.fulcro.rad.database-adapters.crux :as crux])
-  (crux/start-databases (crux/symbolize-crux-modules config))
+  (crux/start-databases (crux/symbolize-xtdb-modules config))
   ```
 
   * `options`: a map that contains co/transaction-functions

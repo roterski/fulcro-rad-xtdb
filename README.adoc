@@ -16,28 +16,28 @@ It's a very first alpha iteration - it passes integration test and seems to be w
 There is an example application https://github.com/roterski/fulcro-rad-demo[roterski/fulcro-rad-demo] that can be referenced for how to properly configure this plugin.
 
 `crux-adapter/start-databases` expects a map with `:roterski.fulcro.rad.database-adapters.crux/databases` key that contains configuration maps for each defined database.
- Configuration maps are then passed directly to `crux.api/start-node` so please refer to https://opencrux.com/reference/21.02-1.15.0/configuration.html[Crux documentation] for available options.
+ Configuration maps are then passed directly to `xtdb.api/start-node` so please refer to https://opencrux.com/reference/21.02-1.15.0/configuration.html[Crux documentation] for available options.
 
 [source, clojure]
 -----
 :roterski.fulcro.rad.database-adapters.crux/databases
-    {:main {:crux.jdbc/connection-pool {:dialect #:crux{:module "crux.jdbc.psql/->dialect"}
+    {:main {:xtdb.jdbc/connection-pool {:dialect #:xtdb{:module "xtdb.jdbc.psql/->dialect"}
                                         :db-spec {:dbname   "fulcro-rad-demo"
                                                              :user     "postgres"
                                                              :password "postgres"}}
-            :crux/tx-log               {:crux/module "crux.jdbc/->tx-log"
-                                        :connection-pool :crux.jdbc/connection-pool}
-            :crux/document-store       {:crux/module "crux.jdbc/->document-store"
-                                        :connection-pool :crux.jdbc/connection-pool}}}
+            :xtdb/tx-log               {:xtdb/module "xtdb.jdbc/->tx-log"
+                                        :connection-pool :xtdb.jdbc/connection-pool}
+            :xtdb/document-store       {:xtdb/module "xtdb.jdbc/->document-store"
+                                        :connection-pool :xtdb.jdbc/connection-pool}}}
 -----
 
-Because Crux expects module names to be symbols, there's a convenience function `crux-adapter/symbolize-crux-modules` that symbolizes values under `:crux/module` so you can store them as strings in edn file.
+Because Crux expects module names to be symbols, there's a convenience function `crux-adapter/symbolize-xtdb-modules` that symbolizes values under `:xtdb/module` so you can store them as strings in edn file.
 
 [source, clojure]
 -----
 (require '[roterski.fulcro.rad.database-adapters.crux :as crux])
 
-(crux/start-databases (crux/symbolize-crux-modules config))
+(crux/start-databases (crux/symbolize-xtdb-modules config))
 -----
 
 

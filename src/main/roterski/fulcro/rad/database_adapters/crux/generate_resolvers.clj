@@ -6,7 +6,7 @@
    [roterski.fulcro.rad.database-adapters.crux-options :as co]
    [com.rpl.specter :as sp]
    [com.wsscode.pathom.connect :as pc]
-   [crux.api :as crux]
+   [xtdb.api :as xt]
    [edn-query-language.core :as eql]
    [taoensso.encore :as enc]
    [clojure.spec.alpha :as s]
@@ -27,7 +27,7 @@
     (reduce-kv
      (fn [m k v]
        (cond
-         (= :crux.db/id k) (assoc m id-key v)
+         (= :xt/id k) (assoc m id-key v)
          (and (join-key? k) (vector? v)) (assoc m k (mapv #(fix-id-keys k->a (join-key->children k) %) v))
          (and (join-key? k) (map? v)) (assoc m k (fix-id-keys k->a (join-key->children k) v))
          :else (assoc m k v)))
@@ -38,10 +38,10 @@
        [::attr/attributes ::eql/query => ::eql/query]
        (let [identity? #(true? (::attr/identity? %))
              identities (set (sp/select [sp/ALL identity? ::attr/qualified-key] all-attributes))]
-         (sp/transform (sp/walker keyword?) (fn [k] (if (contains? identities k) :crux.db/id k)) pathom-query)))
+         (sp/transform (sp/walker keyword?) (fn [k] (if (contains? identities k) :xt/id k)) pathom-query)))
 
 (>defn crux-result->pathom-result
-       "Convert a crux result containing :crux.db/id into a pathom result containing the proper id keyword that was used
+       "Convert a crux result containing :xt/id into a pathom result containing the proper id keyword that was used
    in the original query."
        [k->a pathom-query result]
        [(s/map-of keyword? ::attr/attribute) ::eql/query (? coll?) => (? coll?)]
@@ -58,8 +58,8 @@
         ids (mapv second idents)
         query {:find ['?uuid `(~'pull ~'?account ~desired-output)]
                :in '[[?uuid ...]]
-               :where [['?account :crux.db/id '?uuid]]}
-        id->value (->> (crux/q db query ids)
+               :where [['?account :xt/id '?uuid]]}
+        id->value (->> (xt/q db query ids)
                        (reduce (fn [acc [id value]]
                                  (assoc acc id (assoc value attr id)))
                                {}))]

@@ -6,23 +6,23 @@
    [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
    [com.fulcrologic.rad.attributes :as attr]
    [roterski.fulcro.rad.database-adapters.crux-options :as co]
-   [crux.api :as c]
+   [xtdb.api :as xt]
    [com.fulcrologic.rad.form :as form]
    [taoensso.timbre :as log])
   (:import (java.util UUID)))
 
 (def transaction-functions
   {::delta-update '(fn [ctx [id {:keys [before after]}]]
-                     (let [db (crux.api/db ctx)
-                           entity (crux.api/entity db id)
+                     (let [db (xtdb.api/db ctx)
+                           entity (xtdb.api/entity db id)
                            before (when entity
                                     (reduce (fn [e [k v]]
                                               (cond-> e
                                                 (and (some? v) (get e k)) (assoc k v)))
                                             entity
                                             before))]
-                       [[:crux.tx/match id before]
-                        [:crux.tx/put (merge entity after)]]))})
+                       [[:xtdb.api/match id before]
+                        [:xtdb.api/put (merge entity after)]]))})
 
 (def keys-in-delta
   (fn keys-in-delta [delta]
@@ -69,7 +69,7 @@
   [doc-delta]
   (->> doc-delta
        (reduce (fn [acc [id delta]]
-                 (conj acc [:crux.tx/fn ::delta-update [id delta]]))
+                 (conj acc [::xt/fn ::delta-update [id delta]]))
                [])))
 
 (defn is-ident? [value]
@@ -110,7 +110,7 @@
                                                  {}
                                                  doc)
                                          (assoc-in [:after attr] key)
-                                         (assoc-in [:after :crux.db/id] key)
+                                         (assoc-in [:after :xt/id] key)
                                          (update :before idents->ids tempid->generated-id env)
                                          (update :after idents->ids tempid->generated-id env)))))
                {})))
@@ -139,13 +139,13 @@
       (if (and node (seq txn))
         (try
           (let [database-atom   (get-in env [co/databases schema])
-                tx (c/submit-tx node txn)]
+                tx (xt/submit-tx node txn)]
             (swap! result update :tempids merge tempid->generated-id)
-            (c/await-tx node tx)
-            (when-not (c/tx-committed? node tx)
+            (xt/await-tx node tx)
+            (when-not (xt/tx-committed? node tx)
               (log/error "Transaction failed!"))
             (when database-atom
-              (reset! database-atom (c/db node))))
+              (reset! database-atom (xt/db node))))
           (catch Exception e
             (log/error e "Transaction failed!")
             {}))
