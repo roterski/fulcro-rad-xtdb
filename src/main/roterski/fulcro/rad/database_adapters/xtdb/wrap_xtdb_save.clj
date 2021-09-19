@@ -1,11 +1,11 @@
-(ns roterski.fulcro.rad.database-adapters.crux.wrap-crux-save
+(ns roterski.fulcro.rad.database-adapters.xtdb.wrap-xtdb-save
   (:require
    [clojure.pprint :refer [pprint]]
    [com.fulcrologic.fulcro.algorithms.do-not-use :refer [deep-merge]]
    [com.fulcrologic.guardrails.core :refer [>defn => ?]]
    [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
    [com.fulcrologic.rad.attributes :as attr]
-   [roterski.fulcro.rad.database-adapters.crux-options :as co]
+   [roterski.fulcro.rad.database-adapters.xtdb-options :as xo]
    [xtdb.api :as xt]
    [com.fulcrologic.rad.form :as form]
    [taoensso.timbre :as log])
@@ -125,20 +125,20 @@
                    ->delta-update-txs)}))
 
 (defn save-form!
-  "Do all of the possible Crux operations for the given form delta (save to all Crux databases involved)"
+  "Do all of the possible xtdb operations for the given form delta (save to all xtdb databases involved)"
   [env {::form/keys [delta]}]
   (let [schemas (schemas-for-delta env delta)
         result  (atom {:tempids {}})]
     (log/debug "Saving form across " schemas)
     (doseq [schema schemas
-            :let [node (-> env co/nodes (get schema))
+            :let [node (-> env xo/nodes (get schema))
                   {:keys [tempid->generated-id txn]} (delta->txn env schema delta)]]
       (log/debug "Saving form delta" (with-out-str (pprint delta)))
       (log/debug "on schema" schema)
       (log/debug "Running txn\n" (with-out-str (pprint txn)))
       (if (and node (seq txn))
         (try
-          (let [database-atom   (get-in env [co/databases schema])
+          (let [database-atom   (get-in env [xo/databases schema])
                 tx (xt/submit-tx node txn)]
             (swap! result update :tempids merge tempid->generated-id)
             (xt/await-tx node tx)
@@ -152,8 +152,8 @@
         (log/error "Unable to save form. Either node was missing in env, or txn was empty.")))
     @result))
 
-(defn wrap-crux-save
-  "Form save middleware to accomplish Crux saves."
+(defn wrap-xtdb-save
+  "Form save middleware to accomplish xtdb saves."
   ([]
    (fn [{::form/keys [params] :as pathom-env}]
      (let [save-result (save-form! pathom-env params)]

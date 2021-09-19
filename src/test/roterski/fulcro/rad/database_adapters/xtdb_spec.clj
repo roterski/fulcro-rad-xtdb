@@ -1,4 +1,4 @@
-(ns roterski.fulcro.rad.database-adapters.crux-spec
+(ns roterski.fulcro.rad.database-adapters.xtdb-spec
   (:require
    [fulcro-spec.core :refer [specification assertions component behavior when-mocking]]
    [com.fulcrologic.rad.ids :as ids]
@@ -7,9 +7,9 @@
    [roterski.fulcro.rad.test-schema.address :as address]
    [roterski.fulcro.rad.test-schema.thing :as thing]
    [com.fulcrologic.rad.attributes :as attr]
-   [roterski.fulcro.rad.database-adapters.crux.wrap-crux-save :as wcs]
-   [roterski.fulcro.rad.database-adapters.crux :as crux-adapter]
-   [roterski.fulcro.rad.database-adapters.crux-options :as co]
+   [roterski.fulcro.rad.database-adapters.xtdb.wrap-xtdb-save :as wcs]
+   [roterski.fulcro.rad.database-adapters.xtdb :as xtdb-adapter]
+   [roterski.fulcro.rad.database-adapters.xtdb-options :as xo]
    [xtdb.api :as xt]
    [clojure.test :refer [use-fixtures]]
    [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
@@ -27,10 +27,10 @@
 (def ^:dynamic *env* {})
 
 (defn with-env [tests]
-  (let [node (:main (crux-adapter/start-databases {co/databases {:main {}}}))]
+  (let [node (:main (xtdb-adapter/start-databases {xo/databases {:main {}}}))]
     (binding [*node* node
               *env* {::attr/key->attribute key->attribute
-                     co/nodes       {:production node}}]
+                     xo/nodes       {:production node}}]
       (tests)
       (.close node))))
 
@@ -100,13 +100,13 @@
 ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (specification "Pathom parser integration (save + generated resolvers)"
-               (let [save-middleware (crux-adapter/wrap-crux-save)
-                     delete-middleware (crux-adapter/wrap-crux-delete)
-                     automatic-resolvers (crux-adapter/generate-resolvers all-attributes :production)
+               (let [save-middleware (xtdb-adapter/wrap-xtdb-save)
+                     delete-middleware (xtdb-adapter/wrap-xtdb-delete)
+                     automatic-resolvers (xtdb-adapter/generate-resolvers all-attributes :production)
                      parser (pathom/new-parser {}
                                                [(attr/pathom-plugin all-attributes)
                                                 (form/pathom-plugin save-middleware delete-middleware)
-                                                (crux-adapter/pathom-plugin (fn [env] {:production *node*}))]
+                                                (xtdb-adapter/pathom-plugin (fn [env] {:production *node*}))]
                                                [automatic-resolvers form/resolvers])]
                  (component "Saving new items"
                             (let [temp-person-id (tempid/tempid)
@@ -172,7 +172,7 @@
 ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (specification "Attribute Options"
-               (let [person-resolver (first (crux-adapter/generate-resolvers person/attributes :production))]
+               (let [person-resolver (first (xtdb-adapter/generate-resolvers person/attributes :production))]
                  (component "defattr applies ::pc/transform to the resolver map"
                             (assertions
                              "person resolver has been transformed by ::pc/transform"

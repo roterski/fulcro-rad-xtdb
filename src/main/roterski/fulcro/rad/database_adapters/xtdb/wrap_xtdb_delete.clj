@@ -1,8 +1,8 @@
-(ns roterski.fulcro.rad.database-adapters.crux.wrap-crux-delete
+(ns roterski.fulcro.rad.database-adapters.xtdb.wrap-xtdb-delete
   (:require
    [com.fulcrologic.fulcro.algorithms.do-not-use :refer [deep-merge]]
    [com.fulcrologic.rad.attributes :as attr]
-   [roterski.fulcro.rad.database-adapters.crux-options :as co]
+   [roterski.fulcro.rad.database-adapters.xtdb-options :as xo]
    [com.fulcrologic.rad.form :as form]
    [taoensso.encore :as enc]
    [taoensso.timbre :as log]
@@ -15,19 +15,19 @@
                id         (get params pk)
                ident      [pk id]
                {:keys [::attr/schema]} (key->attribute pk)
-               node (-> env co/nodes (get schema))]
+               node (-> env xo/nodes (get schema))]
     (do
       (log/info "Deleting" ident)
-      (let [database-atom (get-in env [co/databases schema])
+      (let [database-atom (get-in env [xo/databases schema])
             tx (xt/submit-tx node [[::xt/delete id]])]
         (xt/await-tx node tx)
         (when database-atom
           (reset! database-atom (xt/db node)))
         {}))
-    (log/warn "Crux adapter failed to delete " params)))
+    (log/warn "xtdb adapter failed to delete " params)))
 
-(defn wrap-crux-delete
-  "Form delete middleware to accomplish crux deletes."
+(defn wrap-xtdb-delete
+  "Form delete middleware to accomplish xtdb deletes."
   ([handler]
    (fn [{::form/keys [params] :as pathom-env}]
      (let [local-result   (delete-entity! pathom-env params)
