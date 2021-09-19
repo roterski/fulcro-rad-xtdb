@@ -2,7 +2,7 @@
 
 **Note** Crux database has been renamed to XTDB (see https://github.com/xtdb/xtdb/releases/tag/1.19.0-beta1[crux -> xtdb migration guide]).
 
-image:https://img.shields.io/clojars/v/roterski/fulcro-rad-crux.svg[link=https://clojars.org/roterski/fulcro-rad-crux]
+image:https://img.shields.io/clojars/v/net.clojars.roterski/fulcro-rad-xtdb.svglink=https://clojars.org/net.clojars.roterski/fulcro-rad-xtdb]
 
 This is a plugin for https://github.com/fulcrologic/fulcro-rad[Fulcro RAD] that adds support for using https://xtdb.com/[xtdb] (formely known as Crux) databases as the back-end technology.
 
