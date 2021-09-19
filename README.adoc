@@ -1,10 +1,12 @@
-= Crux Database Plugin
+= XTDB Database Plugin
+
+**Note** Crux database has been renamed to XTDB (see https://github.com/xtdb/xtdb/releases/tag/1.19.0-beta1[crux -> xtdb migration guide]).
 
 image:https://img.shields.io/clojars/v/roterski/fulcro-rad-crux.svg[link=https://clojars.org/roterski/fulcro-rad-crux]
 
-This is a plugin for https://github.com/fulcrologic/fulcro-rad[Fulcro RAD] that adds support for using https://opencrux.com/[Crux] databases as the back-end technology.
+This is a plugin for https://github.com/fulcrologic/fulcro-rad[Fulcro RAD] that adds support for using https://xtdb.com/[xtdb] (formely known as Crux) databases as the back-end technology.
 
-This repo bases on https://github.com/fulcrologic/fulcro-rad-datomic[fulcrologic/fulcro-rad-datomic] adapted to Crux api with some Datomic specific features dropped (e.g. schemas and Datomic Cloud support).
+This repo bases on https://github.com/fulcrologic/fulcro-rad-datomic[fulcrologic/fulcro-rad-datomic] adapted to xtdb api with some Datomic specific features dropped (e.g. schemas and Datomic Cloud support).
 
 == Status
 
@@ -15,12 +17,12 @@ It's a very first alpha iteration - it passes integration test and seems to be w
 
 There is an example application https://github.com/roterski/fulcro-rad-demo[roterski/fulcro-rad-demo] that can be referenced for how to properly configure this plugin.
 
-`crux-adapter/start-databases` expects a map with `:roterski.fulcro.rad.database-adapters.crux/databases` key that contains configuration maps for each defined database.
- Configuration maps are then passed directly to `xtdb.api/start-node` so please refer to https://opencrux.com/reference/21.02-1.15.0/configuration.html[Crux documentation] for available options.
+`xtdb-adapter/start-databases` expects a map with `:roterski.fulcro.rad.database-adapters.xtdb/databases` key that contains configuration maps for each defined database.
+ Configuration maps are then passed directly to `xtdb.api/start-node` so please refer to https://xtdb.com/reference/1.19.0-beta1/configuration.html[xtdb documentation] for available options.
 
 [source, clojure]
 -----
-:roterski.fulcro.rad.database-adapters.crux/databases
+:roterski.fulcro.rad.database-adapters.xtdb/databases
     {:main {:xtdb.jdbc/connection-pool {:dialect #:xtdb{:module "xtdb.jdbc.psql/->dialect"}
                                         :db-spec {:dbname   "fulcro-rad-demo"
                                                              :user     "postgres"
@@ -31,13 +33,13 @@ There is an example application https://github.com/roterski/fulcro-rad-demo[rote
                                         :connection-pool :xtdb.jdbc/connection-pool}}}
 -----
 
-Because Crux expects module names to be symbols, there's a convenience function `crux-adapter/symbolize-xtdb-modules` that symbolizes values under `:xtdb/module` so you can store them as strings in edn file.
+Because xtdb expects module names to be symbols, there's a convenience function `xtdb-adapter/symbolize-xtdb-modules` that symbolizes values under `:xtdb/module` so you can store them as strings in edn file.
 
 [source, clojure]
 -----
-(require '[roterski.fulcro.rad.database-adapters.crux :as crux])
+(require '[roterski.fulcro.rad.database-adapters.xtdb :as xtdb])
 
-(crux/start-databases (crux/symbolize-xtdb-modules config))
+(xtdb/start-databases (xtdb/symbolize-xtdb-modules config))
 -----
 
 

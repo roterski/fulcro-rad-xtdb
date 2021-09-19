@@ -1,9 +1,9 @@
-(ns roterski.fulcro.rad.database-adapters.crux.generate-resolvers
+(ns roterski.fulcro.rad.database-adapters.xtdb.generate-resolvers
   (:require
    [com.fulcrologic.guardrails.core :refer [>defn => ?]]
    [com.fulcrologic.rad.attributes :as attr]
    [com.fulcrologic.rad.authorization :as auth]
-   [roterski.fulcro.rad.database-adapters.crux-options :as co]
+   [roterski.fulcro.rad.database-adapters.xtdb-options :as xo]
    [com.rpl.specter :as sp]
    [com.wsscode.pathom.connect :as pc]
    [xtdb.api :as xt]
@@ -34,14 +34,14 @@
      {}
      result)))
 
-(>defn pathom-query->crux-query [all-attributes pathom-query]
+(>defn pathom-query->xtdb-query [all-attributes pathom-query]
        [::attr/attributes ::eql/query => ::eql/query]
        (let [identity? #(true? (::attr/identity? %))
              identities (set (sp/select [sp/ALL identity? ::attr/qualified-key] all-attributes))]
          (sp/transform (sp/walker keyword?) (fn [k] (if (contains? identities k) :xt/id k)) pathom-query)))
 
-(>defn crux-result->pathom-result
-       "Convert a crux result containing :xt/id into a pathom result containing the proper id keyword that was used
+(>defn xtdb-result->pathom-result
+       "Convert a xtdb result containing :xt/id into a pathom result containing the proper id keyword that was used
    in the original query."
        [k->a pathom-query result]
        [(s/map-of keyword? ::attr/attribute) ::eql/query (? coll?) => (? coll?)]
@@ -71,7 +71,7 @@
     :as         env} input]
   (let [{::attr/keys [qualified-key]} id-attribute
         one? (not (sequential? input))]
-    (enc/if-let [db           (some-> (get-in env [co/databases schema]) deref)
+    (enc/if-let [db           (some-> (get-in env [xo/databases schema]) deref)
                  query        (get env ::default-query)
                  ids          (if one?
                                 [(get input qualified-key)]
@@ -100,7 +100,7 @@
        (log/info "Building ID resolver for" qualified-key)
        (enc/if-let [_          id-attribute
                     outputs    (attr/attributes->eql output-attributes)
-                    pull-query (pathom-query->crux-query all-attributes outputs)]
+                    pull-query (pathom-query->xtdb-query all-attributes outputs)]
          (let [resolve-sym      (symbol
                                  (str (namespace qualified-key))
                                  (str (name qualified-key) "-resolver"))
@@ -108,7 +108,7 @@
                                   (fn [env input]
                                     (r (assoc env ::pc/sym resolve-sym) input)))]
            (log/debug "Computed output is" outputs)
-           (log/debug "Crux pull query to derive output is" pull-query)
+           (log/debug "xtdb pull query to derive output is" pull-query)
            (cond-> {::pc/sym     resolve-sym
                     ::pc/output  outputs
                     ::pc/batch?  true
@@ -120,7 +120,7 @@
                                                         ::id-attribute id-attribute
                                                         ::default-query pull-query)
                                                  input)
-                                                (crux-result->pathom-result key->attribute outputs)
+                                                (xtdb-result->pathom-result key->attribute outputs)
                                                 (auth/redact env)))
                                    wrap-resolve (wrap-resolve)
                                    :always (with-resolve-sym))
