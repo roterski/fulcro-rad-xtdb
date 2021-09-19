@@ -4,7 +4,7 @@
   <groupId>net.clojars.roterski</groupId>
   <artifactId>fulcro-rad-xtdb</artifactId>
   <packaging>jar</packaging>
-  <version>0.0.1-alpha-5</version>
+  <version>0.0.1-alpha-6</version>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.source>1.8</maven.compiler.source>
@@ -12,7 +12,7 @@
   </properties>
   <name>Fulcro RAD XTDB</name>
   <description>A XTDB database driver for Fulcro RAD.</description>
-  <url>https://github.com/roterski/fulcro-rad-crux</url>
+  <url>https://github.com/roterski/fulcro-rad-xtdb</url>
   <licenses>
     <license>
       <name>MIT</name>
@@ -20,9 +20,9 @@
     </license>
   </licenses>
   <scm>
-    <url>https://github.com/roterski/fulcro-rad-crux</url>
-    <connection>scm:git:git://github.com/roterski/fulcro-rad-crux.git</connection>
-    <developerConnection>scm:git:ssh://git@github.com/roterski/fulcro-rad-crux.git</developerConnection>
+    <url>https://github.com/roterski/fulcro-rad-xtdb</url>
+    <connection>scm:git:git://github.com/roterski/fulcro-rad-xtdb.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/roterski/fulcro-rad-xtdb.git</developerConnection>
     <tag/>
   </scm>
   <distributionManagement>
