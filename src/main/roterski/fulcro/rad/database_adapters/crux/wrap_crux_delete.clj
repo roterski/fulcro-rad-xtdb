@@ -6,7 +6,7 @@
    [com.fulcrologic.rad.form :as form]
    [taoensso.encore :as enc]
    [taoensso.timbre :as log]
-   [crux.api :as c]))
+   [xtdb.api :as xt]))
 
 (defn delete-entity!
   "Delete the given entity, if possible."
@@ -19,10 +19,10 @@
     (do
       (log/info "Deleting" ident)
       (let [database-atom (get-in env [co/databases schema])
-            tx (c/submit-tx node [[:crux.tx/delete id]])]
-        (c/await-tx node tx)
+            tx (xt/submit-tx node [[::xt/delete id]])]
+        (xt/await-tx node tx)
         (when database-atom
-          (reset! database-atom (c/db node)))
+          (reset! database-atom (xt/db node)))
         {}))
     (log/warn "Crux adapter failed to delete " params)))
 

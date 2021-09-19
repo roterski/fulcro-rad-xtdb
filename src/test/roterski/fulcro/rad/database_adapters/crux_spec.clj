@@ -10,7 +10,7 @@
    [roterski.fulcro.rad.database-adapters.crux.wrap-crux-save :as wcs]
    [roterski.fulcro.rad.database-adapters.crux :as crux-adapter]
    [roterski.fulcro.rad.database-adapters.crux-options :as co]
-   [crux.api :as crux]
+   [xtdb.api :as xt]
    [clojure.test :refer [use-fixtures]]
    [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
    [com.fulcrologic.rad.pathom :as pathom]
@@ -37,9 +37,9 @@
 (use-fixtures :each with-env)
 
 (specification "save-form!"
-               (let [_ (->> [[:crux.tx/put {:crux.db/id (ids/new-uuid 1) ::address/id (ids/new-uuid 1) ::address/street "A St"}]]
-                            (crux/submit-tx *node*)
-                            (crux/await-tx *node*))
+               (let [_ (->> [[::xt/put {:xt/id (ids/new-uuid 1) ::address/id (ids/new-uuid 1) ::address/street "A St"}]]
+                            (xt/submit-tx *node*)
+                            (xt/await-tx *node*))
                      tempid1 (tempid/tempid (ids/new-uuid 100))
                      delta {[::person/id tempid1]           {::person/id              tempid1
                                                              ::person/full-name       {:after "Bob"}
@@ -52,18 +52,18 @@
                   "Gives a proper remapping"
                   (uuid? (get tempids tempid1)) => true
                   "updates the existing doc"
-                  (-> (crux/db *node*)
-                      (crux/q '{:find [(pull ?uid [::address/street])]
+                  (-> (xt/db *node*)
+                      (xt/q '{:find [(pull ?uid [::address/street])]
                                 :in [id]
-                                :where [[?uid :crux.db/id id]]}
+                                :where [[?uid :xt/id id]]}
                               (ids/new-uuid 1))
                       ffirst) => {::address/street "A1 St"}
                   "creates a new doc"
-                  (-> (crux/db *node*)
+                  (-> (xt/db *node*)
 
-                      (crux/q '{:find [(pull ?uid [::person/full-name {::person/primary-address [::address/street]}])]
+                      (xt/q '{:find [(pull ?uid [::person/full-name {::person/primary-address [::address/street]}])]
                                 :in [id]
-                                :where [[?uid :crux.db/id id]]}
+                                :where [[?uid :xt/id id]]}
                               real-id)
 
                       ffirst) => {::person/full-name       "Bob"
@@ -71,9 +71,9 @@
 
 
 (specification "save-form! when there's a 'before' data mismatch"
-               (let [_ (->> [[:crux.tx/put {:crux.db/id (ids/new-uuid 1) ::address/enabled? true ::address/id (ids/new-uuid 1) ::address/street "A St"}]]
-                            (crux/submit-tx *node*)
-                            (crux/await-tx *node*))
+               (let [_ (->> [[::xt/put {:xt/id (ids/new-uuid 1) ::address/enabled? true ::address/id (ids/new-uuid 1) ::address/street "A St"}]]
+                            (xt/submit-tx *node*)
+                            (xt/await-tx *node*))
                      tempid1 (tempid/tempid (ids/new-uuid 100))
                      delta {[::person/id tempid1]           {::person/id              tempid1
                                                              ::person/full-name       {:after "Bob"}
@@ -83,15 +83,15 @@
                      _ (wcs/save-form! *env* {::form/delta delta})]
                  (assertions
                   "does not update the existing doc"
-                  (-> (crux/db *node*)
-                      (crux/q '{:find [(pull ?uid [::address/street])]
+                  (-> (xt/db *node*)
+                      (xt/q '{:find [(pull ?uid [::address/street])]
                                 :in [id]
-                                :where [[?uid :crux.db/id id]]}
+                                :where [[?uid :xt/id id]]}
                               (ids/new-uuid 1))
                       ffirst) => {::address/street "A St"}
                   "does not create a new doc"
-                  (-> (crux/db *node*)
-                      (crux/q '{:find [(pull ?uid [::person/full-name])]
+                  (-> (xt/db *node*)
+                      (xt/q '{:find [(pull ?uid [::person/full-name])]
                                 :where [[?uid ::person/full-name _]]})
                       ffirst) => nil)))
 

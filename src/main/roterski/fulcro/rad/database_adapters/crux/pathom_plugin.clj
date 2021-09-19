@@ -1,6 +1,6 @@
 (ns roterski.fulcro.rad.database-adapters.crux.pathom-plugin
   (:require
-   [crux.api :as c]
+   [xtdb.api :as xt]
    [roterski.fulcro.rad.database-adapters.crux-options :as co]
    [com.rpl.specter :as sp]
    [com.wsscode.pathom.core :as p]))
@@ -24,7 +24,7 @@
   (p/env-wrap-plugin
    (fn [env]
      (let [database-node-map (database-mapper env)
-           databases               (sp/transform [sp/MAP-VALS] (fn [v] (atom (c/db v))) database-node-map)]
+           databases         (sp/transform [sp/MAP-VALS] (fn [v] (atom (xt/db v))) database-node-map)]
        (assoc env
               co/nodes database-node-map
               co/databases databases)))))
