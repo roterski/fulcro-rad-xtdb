@@ -1,6 +1,6 @@
 (ns roterski.fulcro.rad.database-adapters.xtdb-spec
   (:require
-   [fulcro-spec.core :refer [specification assertions component behavior when-mocking]]
+   [fulcro-spec.core :refer [specification assertions component behavior when-mocking =>]]
    [com.fulcrologic.rad.ids :as ids]
    [com.fulcrologic.rad.form :as form]
    [roterski.fulcro.rad.test-schema.person :as person]
@@ -15,8 +15,6 @@
    [com.fulcrologic.fulcro.algorithms.tempid :as tempid]
    [com.fulcrologic.rad.pathom :as pathom]
    [taoensso.timbre :as log]))
-
-(declare =>)
 
 (def all-attributes (vec (concat person/attributes address/attributes thing/attributes)))
 (def key->attribute (into {}
