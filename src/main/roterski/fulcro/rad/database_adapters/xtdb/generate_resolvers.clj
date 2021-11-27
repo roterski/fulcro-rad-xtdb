@@ -4,18 +4,18 @@
    [com.fulcrologic.rad.attributes :as attr]
    [com.fulcrologic.rad.authorization :as auth]
    [roterski.fulcro.rad.database-adapters.xtdb-options :as xo]
-   [com.rpl.specter :as sp]
    [xtdb.api :as xt]
    [edn-query-language.core :as eql]
    [taoensso.encore :as enc]
    [clojure.spec.alpha :as s]
+   [clojure.walk :as walk]
    [taoensso.timbre :as log]))
 
 (defn- fix-id-keys
   "Fix the ID keys recursively on result."
   [k->a ast-nodes result]
   (let [id?                (fn [{:keys [dispatch-key]}] (some-> dispatch-key k->a ::attr/identity?))
-        id-key             (:key (sp/select-first [sp/ALL id?] ast-nodes))
+        id-key             (:key (first (filter id? ast-nodes)))
         join-key->children (into {}
                                  (comp
                                   (filter #(= :join (:type %)))
@@ -33,11 +33,19 @@
      {}
      result)))
 
-(>defn pathom-query->xtdb-query [all-attributes pathom-query]
-       [::attr/attributes ::eql/query => ::eql/query]
-       (let [identity? #(true? (::attr/identity? %))
-             identities (set (sp/select [sp/ALL identity? ::attr/qualified-key] all-attributes))]
-         (sp/transform (sp/walker keyword?) (fn [k] (if (contains? identities k) :xt/id k)) pathom-query)))
+(>defn pathom-query->xtdb-query
+  [all-attributes pathom-query]
+  [::attr/attributes ::eql/query => ::eql/query]
+  (let [identity? #(true? (::attr/identity? %))
+        identities (into #{}
+                         (comp
+                          (filter identity?)
+                          (map ::attr/qualified-key))
+                         all-attributes)]
+    (walk/prewalk (fn [e]
+                    (if (and (keyword? e) (contains? identities e))
+                      :xt/id
+                      e)) pathom-query)))
 
 (>defn xtdb-result->pathom-result
        "Convert a xtdb result containing :xt/id into a pathom result containing the proper id keyword that was used
