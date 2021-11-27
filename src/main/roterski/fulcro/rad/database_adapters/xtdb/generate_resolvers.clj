@@ -5,7 +5,6 @@
    [com.fulcrologic.rad.authorization :as auth]
    [roterski.fulcro.rad.database-adapters.xtdb-options :as xo]
    [com.rpl.specter :as sp]
-   [com.wsscode.pathom.connect :as pc]
    [xtdb.api :as xt]
    [edn-query-language.core :as eql]
    [taoensso.encore :as enc]
@@ -94,9 +93,9 @@
 (>defn id-resolver
        "Generates a resolver from `id-attribute` to the `output-attributes`."
        [all-attributes
-        {::attr/keys [qualified-key] :keys [::attr/schema ::wrap-resolve ::pc/transform] :as id-attribute}
+        {::attr/keys [qualified-key] :keys [::attr/schema ::wrap-resolve :com.wsscode.pathom.connect/transform] :as id-attribute}
         output-attributes]
-       [::attr/attributes ::attr/attribute ::attr/attributes => ::pc/resolver]
+       [::attr/attributes ::attr/attribute ::attr/attributes => :com.wsscode.pathom.connect/resolver]
        (log/info "Building ID resolver for" qualified-key)
        (enc/if-let [_          id-attribute
                     outputs    (attr/attributes->eql output-attributes)
@@ -106,25 +105,25 @@
                                  (str (name qualified-key) "-resolver"))
                with-resolve-sym (fn [r]
                                   (fn [env input]
-                                    (r (assoc env ::pc/sym resolve-sym) input)))]
+                                    (r (assoc env :com.wsscode.pathom.connect/sym resolve-sym) input)))]
            (log/debug "Computed output is" outputs)
            (log/debug "xtdb pull query to derive output is" pull-query)
-           (cond-> {::pc/sym     resolve-sym
-                    ::pc/output  outputs
-                    ::pc/batch?  true
-                    ::pc/resolve (cond-> (fn [{::attr/keys [key->attribute] :as env} input]
-                                           (->> (entity-query
-                                                 (assoc env
-                                                        ::attr/schema schema
-                                                        ::attr/attributes output-attributes
-                                                        ::id-attribute id-attribute
-                                                        ::default-query pull-query)
-                                                 input)
-                                                (xtdb-result->pathom-result key->attribute outputs)
-                                                (auth/redact env)))
-                                   wrap-resolve (wrap-resolve)
-                                   :always (with-resolve-sym))
-                    ::pc/input   #{qualified-key}}
+           (cond-> {:com.wsscode.pathom.connect/sym     resolve-sym
+                    :com.wsscode.pathom.connect/output  outputs
+                    :com.wsscode.pathom.connect/batch?  true
+                    :com.wsscode.pathom.connect/resolve (cond-> (fn [{::attr/keys [key->attribute] :as env} input]
+                                                                  (->> (entity-query
+                                                                        (assoc env
+                                                                               ::attr/schema schema
+                                                                               ::attr/attributes output-attributes
+                                                                               ::id-attribute id-attribute
+                                                                               ::default-query pull-query)
+                                                                        input)
+                                                                       (xtdb-result->pathom-result key->attribute outputs)
+                                                                       (auth/redact env)))
+                                                          wrap-resolve (wrap-resolve)
+                                                          :always (with-resolve-sym))
+                    :com.wsscode.pathom.connect/input   #{qualified-key}}
              transform transform))
          (do
            (log/error "Unable to generate id-resolver. "

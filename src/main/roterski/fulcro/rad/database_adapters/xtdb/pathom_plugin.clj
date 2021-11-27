@@ -2,11 +2,22 @@
   (:require
    [xtdb.api :as xt]
    [roterski.fulcro.rad.database-adapters.xtdb-options :as xo]
-   [com.rpl.specter :as sp]
-   [com.wsscode.pathom.core :as p]))
+   [taoensso.encore :as enc]))
+
+(defn wrap-env
+  ([database-adapter]
+   (wrap-env nil database-adapter))
+  ([base-wrapper database-mapper]
+   (fn [env]
+     (let [database-node-map (database-mapper env)
+           databases         (enc/map-vals (fn [node] (atom (xt/db node))) database-node-map)]
+       (cond-> (assoc env
+                      xo/nodes database-node-map
+                      xo/databases databases)
+         base-wrapper (base-wrapper))))))
 
 (defn pathom-plugin
-  "A pathom plugin that adds the necessary xtdb nodes and databases to the pathom env for
+  "A pathom 2 plugin that adds the necessary xtdb nodes and databases to the pathom env for
   a given request. Requires a database-mapper, which is a
   `(fn [pathom-env] {schema-name connection})` for a given request.
 
@@ -21,10 +32,8 @@
   it adds connection details to the parsing env.
   "
   [database-mapper]
-  (p/env-wrap-plugin
-   (fn [env]
-     (let [database-node-map (database-mapper env)
-           databases         (sp/transform [sp/MAP-VALS] (fn [v] (atom (xt/db v))) database-node-map)]
-       (assoc env
-              xo/nodes database-node-map
-              xo/databases databases)))))
+  (let [augment (wrap-env database-mapper)]
+    {:com.wsscode.pathom.core/wrap-parser
+     (fn env-wrap-wrap-parser [parser]
+       (fn env-wrap-wrap-internal [env tx]
+         (parser (augment env) tx)))}))
