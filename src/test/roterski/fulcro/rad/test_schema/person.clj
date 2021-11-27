@@ -1,13 +1,12 @@
 (ns roterski.fulcro.rad.test-schema.person
   (:require
-    [com.fulcrologic.rad.attributes :as attr :refer [defattr]]
-    [com.wsscode.pathom.connect :as pc]))
+   [com.fulcrologic.rad.attributes :as attr :refer [defattr]]))
 
 (defattr id ::id :long
   {::attr/identity?     true
    ::attr/schema        :production
-   ::pc/transform (fn [resolver]
-                    (assoc resolver ::transform-succeeded true))})
+   :com.wsscode.pathom.connect/transform (fn [resolver]
+                                           (assoc resolver ::transform-succeeded true))})
 
 (defattr full-name ::full-name :string
   {::attr/schema     :production
