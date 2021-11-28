@@ -17,6 +17,8 @@
 
 (def pathom-plugin pp/pathom-plugin)
 
+(def wrap-env pp/wrap-env)
+
 (def generate-resolvers gr/generate-resolvers)
 
 (def wrap-xtdb-save wcs/wrap-xtdb-save)
