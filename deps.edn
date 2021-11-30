@@ -6,7 +6,7 @@
            com.fulcrologic/guardrails {:mvn/version "0.0.12"}
            com.fulcrologic/fulcro-rad {:mvn/version "1.0.0-RC1"}
            org.clojure/clojure        {:mvn/version "1.10.1"}
-           com.xtdb/xtdb-core         {:mvn/version "1.19.0"}}
+           com.xtdb/xtdb-core         {:mvn/version "1.20.0"}}
 
  :aliases {:test      {:extra-paths ["src/test"]
                        :extra-deps  {fulcrologic/fulcro-spec {:mvn/version "3.1.6"}}}
